@@ -48,9 +48,15 @@ struct PictureView: View {
         }
     }
     private var dialEditor: some View {
-        HStack(alignment: .top, spacing: 16) {
-            dialPreview.frame(minWidth: 310)
-            ElementInspector(picture: picture).frame(minHeight: 375)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 20) {
+                dialPreview.frame(minWidth: 310, idealWidth: 352, maxWidth: .infinity)
+                DialElementTable(picture: picture).fixedSize(horizontal: true, vertical: false)
+            }
+            VStack(alignment: .leading, spacing: 20) {
+                dialPreview
+                DialElementTable(picture: picture)
+            }
         }
     }
     private var dialPreview: some View {
