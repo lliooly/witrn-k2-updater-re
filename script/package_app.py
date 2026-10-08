@@ -52,8 +52,8 @@ def main():
     info = {
         "CFBundleExecutable": "K2Updater", "CFBundleIdentifier": "dev.witrn.k2updater",
         "CFBundleName": "K2 Updater", "CFBundleDisplayName": "WITRN K2",
-        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.5.0",
-        "CFBundleVersion": "6", "LSMinimumSystemVersion": "13.0",
+        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.5.1",
+        "CFBundleVersion": "7", "LSMinimumSystemVersion": "13.0",
         "NSPrincipalClass": "NSApplication", "NSHighResolutionCapable": True,
         "CFBundleDevelopmentRegion": "zh_CN",
         "UTExportedTypeDeclarations": [{"UTTypeIdentifier": "dev.witrn.k2-firmware",

@@ -21,9 +21,9 @@ K2Picture 格式与资源区依据见[静态分析记录](reverse/K2PICTURE.md)�
 
 0.4.0 新增完整虚拟 E-Mark 管理：10 组配置、默认组及排序、官方 `.wtemark` 导入导出、名称和身份／线材参数、原始 VDO 编辑、`.k2emark` 工程与撤销。设备读取、写前双遍备份、完整扇区校验和恢复复用资源框架。格式及地址依据见 [E-Mark 静态分析](reverse/K2EMARK.md)；E-Mark 实机读写仍待验证。
 
-0.5.0 新增「曲线与记录」：普通模式只读采集、电压／电流／功率／温度／D±曲线、长时间 SQLite 记录、暂停／继续、自动停止、历史文件与官方 CSV/SQLite 交换、区间统计和 PNG 曲线导出。采集协议改编自 MIT [witrn-driver](https://github.com/didim99/witrn-driver)，许可与修改见 [第三方说明](third_party/README.md)。实机遥测和官方真实文件往返尚未验证，软件验证详情见 [曲线工具说明](docs/k2-monitor.md)。
+0.5.0 新增「曲线与记录」：普通模式只读采集、电压／电流／功率／温度／D±曲线、长时间 SQLite 记录、暂停／继续、自动停止、历史文件与官方 CSV/SQLite 交换、区间统计和 PNG 曲线导出。采集协议改编自 MIT [witrn-driver](https://github.com/didim99/witrn-driver)，许可与修改见 [第三方说明](third_party/README.md)。0.5.1 修正 USB 到达时间抖动导致的采样漂移，并依据 K2 5.8 实机捕获启用遥测双校验。只读实机采集、暂停／继续、自动停止、无负载及正常充电负载读数对照、实机记录的三种格式往返已验证；反向接线及官方程序往返仍待验证。详见 [曲线工具说明](docs/k2-monitor.md)与[实机验证记录](docs/k2-monitor-hardware-validation.md)。
 
-本地构建生成 `dist/K2 Updater.app`，内置 Python、HIDAPI 与 SQLite，面向 macOS 13+ 的 Apple Silicon / Intel；使用 ad-hoc 本地签名。本次交付旁路应用为 `dist/K2 Updater 0.5.0.app`。构建、使用方法和验证范围见 [macOS 图形版说明](docs/macos-app.md)。
+本地构建生成 `dist/K2 Updater.app`，内置 Python、HIDAPI 与 SQLite，面向 macOS 13+ 的 Apple Silicon / Intel；使用 ad-hoc 本地签名。本次交付旁路应用为 `dist/K2 Updater 0.5.1.app`。构建、使用方法和验证范围见 [macOS 图形版说明](docs/macos-app.md)。
 
 ## 安装
 
