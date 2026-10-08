@@ -4,7 +4,6 @@ struct ConnectionSidebar: View {
     @ObservedObject var updater: UpdaterStore
     @ObservedObject var monitor: MonitorStore
     let section: ToolSection
-    @Binding var expanded: Bool
     // Page navigation deliberately does not change this preparation selection.
     @State private var mode = "normal"
 
@@ -14,12 +13,7 @@ struct ConnectionSidebar: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("设备连接").font(.headline)
-                    Spacer()
-                    Button { expanded = false } label: { Image(systemName: "sidebar.right") }
-                        .buttonStyle(.plain).help("收起连接栏").accessibilityLabel("收起连接栏")
-                }
+                Text("设备连接").font(.headline)
                 Label(summary.title, systemImage: summary.symbol)
                     .foregroundStyle(summary.color).font(.callout.weight(.medium))
                 deviceSelection

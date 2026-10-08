@@ -24,7 +24,6 @@ struct ContentView: View {
     @AppStorage("connectionSidebarExpanded") private var connectionExpanded = true
     @State private var restoreIntent: ResourceWriteIntent?
     private var section: ToolSection { selection ?? .monitor }
-    private var connection: ConnectionPresentation { .current(updater: store, monitor: monitor) }
 
     var body: some View {
         NavigationSplitView {
@@ -49,7 +48,7 @@ struct ContentView: View {
                     // Keep the connection component at the same identity on every page.
                     // Hiding changes only its width; no appearance hook owns a session.
                     Divider().opacity(connectionExpanded ? 1 : 0)
-                    ConnectionSidebar(updater: store, monitor: monitor, section: section, expanded: $connectionExpanded)
+                    ConnectionSidebar(updater: store, monitor: monitor, section: section)
                         .frame(width: connectionExpanded ? 260 : 0)
                         .clipped().allowsHitTesting(connectionExpanded).accessibilityHidden(!connectionExpanded)
                 }
@@ -67,10 +66,7 @@ struct ContentView: View {
                     Button("打开备份文件夹") { store.showBackup() }.disabled(store.backupPath == nil)
                     Button("查看日志") { store.showLog() }.disabled(store.tracePath == nil)
                 } label: { Label("维护", systemImage: "wrench.and.screwdriver") }
-                Label(connection.title, systemImage: connection.symbol)
-                    .foregroundStyle(connection.color).font(.caption)
-                Button { connectionExpanded.toggle() } label: { Image(systemName: "sidebar.right") }
-                    .help("显示或隐藏设备连接栏").accessibilityLabel("显示或隐藏设备连接栏")
+                ConnectionToolbarButton(updater: store, monitor: monitor, expanded: $connectionExpanded)
             }
         }
         .alert("恢复\(restoreIntent?.kind.title ?? "资源")备份？", isPresented: Binding(get: { restoreIntent != nil }, set: { if !$0 { restoreIntent = nil } })) {
