@@ -8,7 +8,7 @@ struct K2UpdaterApp: App {
     @StateObject private var picture = PictureStore()
     @StateObject private var emark = EmarkStore()
     @StateObject private var monitor = MonitorStore()
-    @State private var selection: ToolSection? = .firmware
+    @State private var selection: ToolSection? = .monitor
 
     var body: some Scene {
         Window("WITRN K2", id: "main") {
@@ -16,7 +16,7 @@ struct K2UpdaterApp: App {
                 .background(WindowGuard(store: store, picture: picture, emark: emark, monitor: monitor))
                 .onAppear { delegate.store = store; delegate.picture = picture; delegate.emark = emark; delegate.monitor = monitor; monitor.attach(store) }
         }
-        .defaultSize(width: 1100, height: 880)
+        .defaultSize(width: 1280, height: 880)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {}

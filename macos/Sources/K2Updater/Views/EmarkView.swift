@@ -7,45 +7,20 @@ struct EmarkView: View {
     @State private var writeIntent: ResourceWriteIntent?
     @State private var confirmDelete = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("虚拟 E-Mark").font(.title2).fontWeight(.semibold)
-                Spacer()
-                Text((emark.dirty || !emark.invalidFields.isEmpty) ? "未保存" : "已保存").font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            deviceControls.padding(.horizontal, 20).padding(.vertical, 12)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("编辑 K2 模拟的数据线身份。参数不会改变实际线材的电气能力。设备配置在 DFU 模式下读写，使用时在 K2 菜单选择虚拟 E-Mark。")
+                        .font(.callout).foregroundStyle(.secondary)
+                    HStack(alignment: .top, spacing: 16) {
+                        configurationList.frame(width: 185)
+                        EmarkEditor(emark: emark).frame(minWidth: 310, maxWidth: .infinity, alignment: .topLeading).id(emark.selected)
+                    }.padding(14).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
+                }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text("编辑 K2 模拟的数据线身份。配置在 DFU 模式下读写；使用时在 K2 菜单选择虚拟 E-Mark。参数不会改变实际线材的电气能力。")
-                .font(.callout).foregroundStyle(.secondary)
-            HStack {
-                Button("打开工程…") { emark.open() }
-                Button("保存工程") { emark.save() }
-                Text(emark.projectURL?.lastPathComponent ?? "未命名配置集合").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                Spacer()
-                Button("导入 .wtemark…") { emark.importRecords() }.disabled(emark.bank.count >= 10 || !emark.invalidFields.isEmpty)
-                Button("导出选中配置…") { emark.export() }.disabled(emark.record == nil || !emark.invalidFields.isEmpty)
-            }
-            HStack {
-                Button("读取设备配置") {
-                    guard emark.allowDiscard() else { return }
-                    store.readResource(.emark) { url, kind in emark.acceptRead(url, kind: kind) }
-                }.disabled(!store.canUseResources)
-                Button("读取复制数据") { store.readResource(.emarkCopy) { url, kind in emark.acceptRead(url, kind: kind) } }.disabled(!store.canUseResources)
-                Spacer()
-                Button("备份并写入配置") {
-                    writeIntent = ResourceWriteIntent(kind: .emark, data: emark.bank.data, manifest: nil, manifestHash: nil)
-                }.buttonStyle(.borderedProminent).disabled(!store.canUseResources || !emark.invalidFields.isEmpty)
-            }
-            HStack(alignment: .top, spacing: 16) {
-                configurationList.frame(width: 205)
-                EmarkEditor(emark: emark).frame(maxWidth: .infinity, alignment: .topLeading).id(emark.selected)
-            }.padding(14).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
-            if let copied = emark.copied {
-                HStack {
-                    Label("复制数据：\(copied.name.isEmpty ? "未命名" : copied.name)", systemImage: "doc.on.doc")
-                    Spacer()
-                    Button("添加到配置集合") { emark.add(copied) }.disabled(emark.bank.count >= 10 || !emark.invalidFields.isEmpty)
-                    Button("导出…") { emark.export(copied) }
-                }.font(.callout)
-            }
+
         }.disabled(store.isBusy)
         .alert("写入 \(emark.bank.count) 组 E-Mark 配置？", isPresented: Binding(get: { writeIntent != nil }, set: { if !$0 { writeIntent = nil } })) {
             Button("取消", role: .cancel) { writeIntent = nil }
@@ -60,6 +35,39 @@ struct EmarkView: View {
         .alert("E-Mark 操作未完成", isPresented: Binding(get: { emark.error != nil }, set: { if !$0 { emark.error = nil } })) {
             Button("好") { emark.error = nil }
         } message: { Text(emark.error ?? "") }
+    }
+    private var deviceControls: some View {
+        GroupBox("设备操作") {
+            VStack(alignment: .leading, spacing: 12) {
+                ViewThatFits(in: .horizontal) {
+                    HStack { readActions; Spacer(); writeAction }
+                    VStack(alignment: .leading, spacing: 10) { readActions; writeAction }
+                }
+                if !store.canUseResources { ResourceAvailabilityHint(store: store) }
+                if let copied = emark.copied {
+                    Divider()
+                    Label("复制数据：\(copied.name.isEmpty ? "未命名" : copied.name)", systemImage: "doc.on.doc")
+                    HStack {
+                        Button("添加到配置集合") { emark.add(copied) }.disabled(emark.bank.count >= 10 || !emark.invalidFields.isEmpty)
+                        Button("导出复制数据…") { emark.export(copied) }
+                    }
+                }
+            }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    private var readActions: some View {
+        Menu("从设备读取") {
+            Button("读取设备配置") {
+                guard emark.allowDiscard() else { return }
+                store.readResource(.emark) { url, kind in emark.acceptRead(url, kind: kind) }
+            }
+            Button("读取复制数据") { store.readResource(.emarkCopy) { url, kind in emark.acceptRead(url, kind: kind) } }
+        }.fixedSize().disabled(!store.canUseResources)
+    }
+    private var writeAction: some View {
+        Button("备份并写入配置") {
+            writeIntent = ResourceWriteIntent(kind: .emark, data: emark.bank.data, manifest: nil, manifestHash: nil)
+        }.buttonStyle(.borderedProminent).disabled(!store.canUseResources || !emark.invalidFields.isEmpty)
     }
     private var configurationList: some View {
         VStack(alignment: .leading, spacing: 10) {

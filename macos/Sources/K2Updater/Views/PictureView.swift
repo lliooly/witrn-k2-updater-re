@@ -6,29 +6,17 @@ struct PictureView: View {
     @ObservedObject var picture: PictureStore
     @ObservedObject var store: UpdaterStore
     let startup: Bool
-    @State private var scale = 1.5
+    @SceneStorage("dialPreviewScale") private var scale = 1.5
     @State private var writeIntent: ResourceWriteIntent?
     @State private var dropTarget = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(startup ? "开机图" : "表盘编辑器").font(.title2).fontWeight(.semibold)
-                    Text((picture.projectURL?.lastPathComponent ?? "未命名工程") + (picture.dirty ? " · 已修改" : ""))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("打开工程 / .pic…") { picture.open() }
-                Button("保存工程") { picture.save() }
-            }
-            if startup { startupEditor } else { dialEditor }
+        VStack(spacing: 0) {
+            deviceControls.padding(.horizontal, 20).padding(.vertical, 12)
             Divider()
-            HStack {
-                if !startup { resourceButtons(.layout); Spacer(); resourceButtons(.background) }
-                else { resourceButtons(.startup); Spacer() }
+            ScrollView {
+                Group { if startup { startupEditor } else { dialEditor } }
+                    .padding(20).frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text(startup ? "每次写入后重新进入 DFU，再进行其他操作。" : "背景和布局分别写入，每次完成后重新进入 DFU。最后在 K2 设置 → 6 主题屏开关中开启表盘。")
-                .font(.caption).foregroundStyle(.secondary)
         }
         .disabled(store.isBusy)
         .sheet(item: $picture.imageImport) { ImageCropSheet(item: $0, picture: picture) }
@@ -44,46 +32,72 @@ struct PictureView: View {
         .onDrop(of: [.fileURL], isTargeted: $dropTarget, perform: acceptDrop)
         .overlay { if dropTarget { RoundedRectangle(cornerRadius: 8).stroke(.blue, lineWidth: 2).allowsHitTesting(false) } }
     }
-    private var dialEditor: some View {
-        HStack(alignment: .top, spacing: 20) {
+    private var deviceControls: some View {
+        GroupBox("设备操作") {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("240 × 240").font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Picker("缩放", selection: $scale) { Text("100%").tag(1.0); Text("150%").tag(1.5); Text("200%").tag(2.0) }.frame(width: 130)
-                }
-                ScrollView([.horizontal, .vertical]) { DialCanvas(picture: picture, scale: scale).padding(4) }
-                    .frame(minHeight: 375, idealHeight: 390)
-                Text("示例读数 · 字体和基线预览与实机可能不同\n点击选择，拖动定位，方向键微调 1 像素。")
+                if !startup {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 20) { resourceButtons(.layout); Spacer(); resourceButtons(.background) }
+                        VStack(alignment: .leading, spacing: 16) { resourceButtons(.layout); Divider(); resourceButtons(.background) }
+                    }
+                } else { resourceButtons(.startup) }
+                if !store.canUseResources { ResourceAvailabilityHint(store: store) }
+                Text(startup ? "每次写入后重新进入 DFU，再进行其他操作。" : "背景和布局分别写入，每次完成后重新进入 DFU。最后在 K2 设置 → 6 主题屏开关中开启表盘。")
                     .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button("导入背景…") { picture.chooseImage(.background) }
-                    Button("移除背景") { picture.edit { $0.background = nil } }.disabled(picture.project.background == nil)
-                    Spacer()
-                    Menu("导出") {
-                        Button("布局 .pic…") { picture.export(.layout) }
-                        Button("背景 BMP…") { picture.export(.background) }.disabled(picture.project.background == nil)
-                    }.fixedSize()
-                }
-            }.frame(maxWidth: .infinity)
-            ElementInspector(picture: picture)
+            }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+    private var dialEditor: some View {
+        HStack(alignment: .top, spacing: 16) {
+            dialPreview.frame(minWidth: 310)
+            ElementInspector(picture: picture).frame(minHeight: 375)
+        }
+    }
+    private var dialPreview: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("240 × 240").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Picker("缩放", selection: $scale) { Text("100%").tag(1.0); Text("150%").tag(1.5); Text("200%").tag(2.0) }.frame(width: 130)
+            }
+            ScrollView([.horizontal, .vertical]) { DialCanvas(picture: picture, scale: scale).padding(4) }
+                .frame(minHeight: 375, idealHeight: 390)
+            Text("示例读数 · 字体和基线预览与实机可能不同\n点击选择，拖动定位，方向键微调 1 像素。")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button("导入背景…") { picture.chooseImage(.background) }
+                Menu("背景操作") {
+                    Button("移除背景") { picture.edit { $0.background = nil } }.disabled(picture.project.background == nil)
+                    Button("导出背景 BMP…") { picture.export(.background) }.disabled(picture.project.background == nil)
+                }.fixedSize()
+                Spacer()
+            }
+        }.frame(maxWidth: .infinity)
+    }
     private var startupEditor: some View {
-        HStack(alignment: .top, spacing: 30) {
-            ZStack {
-                Color.black
-                if let image = picture.project.startup?.cgImage { Image(decorative: image, scale: 1).resizable().interpolation(.none) }
-                else { Text("导入一张开机图").foregroundStyle(.white.opacity(0.65)) }
-            }.frame(width: 352.5, height: 352.5)
-            VStack(alignment: .leading, spacing: 16) {
-                Text("235 × 235 像素").font(.headline)
-                Text("支持 BMP、PNG 和 JPEG。导入时调整裁剪或缩放，确认后保存到工程。") .foregroundStyle(.secondary)
-                Button("导入图片…") { picture.chooseImage(.startup) }
+        HStack(alignment: .top, spacing: 24) {
+            startupPreview
+            startupImageActions.frame(minWidth: 200)
+        }.padding(.vertical, 12)
+    }
+    private var startupPreview: some View {
+        ZStack {
+            Color.black
+            if let image = picture.project.startup?.cgImage { Image(decorative: image, scale: 1).resizable().interpolation(.none) }
+            else { Text("导入一张开机图").foregroundStyle(.white.opacity(0.65)) }
+        }.frame(width: 352.5, height: 352.5)
+    }
+    private var startupImageActions: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("235 × 235 像素").font(.headline)
+            Text("支持 BMP、PNG 和 JPEG。导入时调整裁剪或缩放，确认后保存到工程。").foregroundStyle(.secondary)
+            Button(picture.project.startup == nil ? "导入图片…" : "替换图片…") { picture.chooseImage(.startup) }
+                .buttonStyle(.borderedProminent)
+            Menu("图片操作") {
                 Button("导出 BMP…") { picture.export(.startup) }.disabled(picture.project.startup == nil)
                 Button("移除图片") { picture.edit { $0.startup = nil } }.disabled(picture.project.startup == nil)
-            }.frame(maxWidth: .infinity, alignment: .leading)
-        }.padding(.vertical, 12)
+            }.fixedSize()
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private func resourceButtons(_ kind: PictureResource) -> some View {
         VStack(alignment: .leading, spacing: 8) {
