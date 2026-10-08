@@ -4,7 +4,8 @@ import SwiftUI
 struct WindowGuard: NSViewRepresentable {
     let store: UpdaterStore
     let picture: PictureStore
-    func makeCoordinator() -> Coordinator { Coordinator(store, picture) }
+    let emark: EmarkStore
+    func makeCoordinator() -> Coordinator { Coordinator(store, picture, emark) }
     func makeNSView(context: Context) -> NSView { NSView() }
     func updateNSView(_ view: NSView, context: Context) {
         DispatchQueue.main.async {
@@ -29,8 +30,9 @@ struct WindowGuard: NSViewRepresentable {
     final class Coordinator: NSObject, NSWindowDelegate {
         let store: UpdaterStore
         let picture: PictureStore
+        let emark: EmarkStore
         weak var originalDelegate: NSWindowDelegate?
-        init(_ store: UpdaterStore, _ picture: PictureStore) { self.store = store; self.picture = picture }
+        init(_ store: UpdaterStore, _ picture: PictureStore, _ emark: EmarkStore) { self.store = store; self.picture = picture; self.emark = emark }
         override func responds(to selector: Selector!) -> Bool {
             super.responds(to: selector) || originalDelegate?.responds(to: selector) == true
         }
@@ -40,7 +42,7 @@ struct WindowGuard: NSViewRepresentable {
         }
         func windowShouldClose(_ sender: NSWindow) -> Bool {
             if store.isBusy { WindowGuard.explainBusy(store); return false }
-            guard picture.allowDiscard() else { return false }
+            guard picture.allowDiscard(), emark.allowDiscard() else { return false }
             return originalDelegate?.windowShouldClose?(sender) ?? true
         }
     }

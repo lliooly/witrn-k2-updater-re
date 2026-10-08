@@ -8,6 +8,7 @@ let package = Package(
     targets: [
         .target(name: "K2Core"),
         .executableTarget(name: "K2Updater", dependencies: ["K2Core"]),
-        .testTarget(name: "K2CoreTests", dependencies: ["K2Core"])
+        .testTarget(name: "K2CoreTests", dependencies: ["K2Core"]),
+        .testTarget(name: "K2UpdaterTests", dependencies: ["K2Updater", "K2Core"])
     ]
 )

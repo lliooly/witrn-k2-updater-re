@@ -2,14 +2,15 @@ import SwiftUI
 import K2Core
 
 enum ToolSection: String, CaseIterable, Identifiable {
-    case firmware = "固件升级", dial = "表盘", startup = "开机图"
+    case firmware = "固件升级", dial = "表盘", startup = "开机图", emark = "虚拟 E-Mark"
     var id: String { rawValue }
-    var symbol: String { switch self { case .firmware: return "arrow.triangle.2.circlepath"; case .dial: return "speedometer"; case .startup: return "photo" } }
+    var symbol: String { switch self { case .firmware: return "arrow.triangle.2.circlepath"; case .dial: return "speedometer"; case .startup: return "photo"; case .emark: return "cable.connector" } }
 }
 
 struct ContentView: View {
     @ObservedObject var store: UpdaterStore
     @ObservedObject var picture: PictureStore
+    @ObservedObject var emark: EmarkStore
     @Binding var selection: ToolSection?
     @State private var restoreIntent: ResourceWriteIntent?
     var body: some View {
@@ -26,6 +27,7 @@ struct ContentView: View {
                     case .firmware: FirmwareView(store: store)
                     case .dial: PictureView(picture: picture, store: store, startup: false)
                     case .startup: PictureView(picture: picture, store: store, startup: true)
+                    case .emark: EmarkView(emark: emark, store: store)
                     }
                     ProgressCard(store: store)
                     HStack {
@@ -41,7 +43,11 @@ struct ContentView: View {
         .frame(minWidth: 950, minHeight: 720)
         .task { store.refreshDevices() }
         .toolbar {
-            if selection != .firmware {
+            if selection == .emark {
+                Button { emark.newProject() } label: { Label("新建配置集合", systemImage: "doc.badge.plus") }.disabled(store.isBusy)
+                Button { emark.undo() } label: { Label("撤销", systemImage: "arrow.uturn.backward") }.disabled(store.isBusy || !emark.undoAvailable)
+                Button { emark.redo() } label: { Label("重做", systemImage: "arrow.uturn.forward") }.disabled(store.isBusy || !emark.redoAvailable)
+            } else if selection != .firmware {
                 Button { picture.newProject() } label: { Label("新建工程", systemImage: "doc.badge.plus") }.disabled(store.isBusy)
                 Button { picture.undo() } label: { Label("撤销", systemImage: "arrow.uturn.backward") }.disabled(store.isBusy || !picture.undoAvailable)
                 Button { picture.redo() } label: { Label("重做", systemImage: "arrow.uturn.forward") }.disabled(store.isBusy || !picture.redoAvailable)
