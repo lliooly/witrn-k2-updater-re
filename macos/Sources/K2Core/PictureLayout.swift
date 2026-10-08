@@ -6,12 +6,13 @@ public enum PictureError: LocalizedError {
 }
 
 public enum PictureResource: String, Codable, CaseIterable, Sendable {
-    case layout, background, startup
+    case layout, background, startup, emark
+    case emarkCopy = "emark-copy"
     public var title: String {
-        switch self { case .layout: return "表盘布局"; case .background: return "表盘背景"; case .startup: return "开机图" }
+        switch self { case .layout: return "表盘布局"; case .background: return "表盘背景"; case .startup: return "开机图"; case .emark: return "E-Mark 配置集合"; case .emarkCopy: return "复制的 E-Mark" }
     }
-    public var dimension: Int { self == .startup ? 235 : 240 }
-    public var size: Int { self == .layout ? 400 : dimension * dimension * 2 + 8 }
+    public var dimension: Int { self == .startup ? 235 : (self == .background ? 240 : 0) }
+    public var size: Int { switch self { case .layout: return 400; case .emark: return 666; case .emarkCopy: return 66; default: return dimension * dimension * 2 + 8 } }
 }
 
 public struct DialElement: Identifiable, Equatable, Sendable {

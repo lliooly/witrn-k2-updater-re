@@ -19,7 +19,7 @@ public struct PixelImage: Codable, Equatable, Sendable {
     }
 
     public func resourceData(_ kind: PictureResource) throws -> Data {
-        guard kind != .layout, width == kind.dimension, height == kind.dimension else {
+        guard kind.dimension > 0, width == kind.dimension, height == kind.dimension else {
             throw PictureError.invalid("\(kind.title)必须是 \(kind.dimension) × \(kind.dimension)")
         }
         let pixels = [UInt8](rgba)
@@ -38,7 +38,7 @@ public struct PixelImage: Codable, Equatable, Sendable {
 
     public init(resourceData: Data, kind: PictureResource) throws {
         let bytes = [UInt8](resourceData)
-        guard kind != .layout, bytes.count == kind.size,
+        guard kind.dimension > 0, bytes.count == kind.size,
               Array(bytes.prefix(4)) == PictureLayout.magic, Array(bytes.suffix(4)) == PictureLayout.magic else {
             throw PictureError.invalid("设备图片数据无效或尚未设置")
         }

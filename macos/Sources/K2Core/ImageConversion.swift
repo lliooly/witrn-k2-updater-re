@@ -27,6 +27,7 @@ public enum PictureImages {
 
     public static func convert(_ image: CGImage, kind: PictureResource, fit: ImageFit,
                         zoom: Double = 1, x: Double = 0, y: Double = 0) throws -> PixelImage {
+        guard kind.dimension > 0 else { throw PictureError.invalid("此资源不是图片") }
         let n = kind.dimension, w = Double(image.width), h = Double(image.height)
         var bytes = [UInt8](repeating: 0, count: n * n * 4)
         let made = bytes.withUnsafeMutableBytes { buffer -> Bool in
