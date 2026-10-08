@@ -24,7 +24,7 @@ struct ConnectionToolbarButton: View {
                         .foregroundStyle(.green)
                 } else {
                     BrokenLinkSymbol().stroke(style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.red)
                 }
             }.frame(width: 20, height: 20)
         }.help(description).accessibilityLabel(description)
@@ -47,6 +47,8 @@ private struct BrokenLinkSymbol: Shape {
         path.addLine(to: point(0.18, 0.62))
         path.addCurve(to: point(0.38, 0.82), control1: point(-0.02, 0.83), control2: point(0.18, 1.02))
         path.addLine(to: point(0.52, 0.68))
+        path.move(to: point(0.18, 0.18))
+        path.addLine(to: point(0.82, 0.82))
         return path
     }
 }
