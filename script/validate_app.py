@@ -43,6 +43,15 @@ def main():
                 return events[-1]["value"]
             # Loads hidapi under each architecture, enumeration only.
             request("devices", simulation=False)
+            csv = root / (architecture + "-record.csv")
+            csv.write_text('Time(D.hh:mm:ss.ms),Voltage(V),Current(A)\n00:00:00.000,5,-2\n00:00:01.000,5,2\n', encoding="utf-8")
+            imported = request("monitor-import", record_path=str(csv), output_path=str(root / (architecture + "-record.sqlite")))
+            analysis = request("monitor-query", record_path=imported["path"])
+            assert analysis["count"] == 2 and analysis["statistics"]["wh_net"] == 0
+            for kind in ("csv", "official-sqlite", "local-sqlite"):
+                exported = request("monitor-export", record_path=imported["path"], output_path=str(root / (architecture + "-" + kind)), export_kind=kind)
+                recovered = request("monitor-import", record_path=exported["path"], output_path=str(root / (architecture + "-" + kind + "-recovered.sqlite")))
+                assert recovered["count"] == 2
             firmware = request("demo-firmware")
             identity = request("probe")["identity"]
             result = request("upgrade", firmware_path=firmware["firmware_path"],
@@ -63,7 +72,7 @@ def main():
                                    restore_manifest_sha256=sha256(manifest.read_bytes()).hexdigest(),
                                    device_info_sha256=read["identity"]["info_sha256"], confirmed=True)
                 assert restored["simulation_only"] and restored["verified_sha256"]
-            print(f"{architecture}: relocated helper, HID load, firmware and all resource read/write/restore simulations OK")
+            print(f"{architecture}: relocated helper, HID/SQLite load, curve query/exchange, firmware and all resource simulations OK")
     print(f"Bundle signature OK; {len(binaries)} Mach-O files include both architectures")
 
 

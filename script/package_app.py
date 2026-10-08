@@ -36,6 +36,8 @@ def main():
             shutil.copy2(ROOT / name, resources / name)
     licenses = resources / "ThirdPartyLicenses"
     licenses.mkdir()
+    for license_path in (ROOT / "third_party").glob("*"):
+        if license_path.is_file(): shutil.copy2(license_path, licenses / license_path.name)
     shutil.copy2(Path(sys.base_prefix) / "lib/python3.9/LICENSE.txt", licenses / "Python-LICENSE.txt")
     for dependency in ("hidapi", "pyinstaller"):
         distribution = importlib.metadata.distribution(dependency)
@@ -50,8 +52,8 @@ def main():
     info = {
         "CFBundleExecutable": "K2Updater", "CFBundleIdentifier": "dev.witrn.k2updater",
         "CFBundleName": "K2 Updater", "CFBundleDisplayName": "WITRN K2",
-        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.4.0",
-        "CFBundleVersion": "5", "LSMinimumSystemVersion": "13.0",
+        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.5.0",
+        "CFBundleVersion": "6", "LSMinimumSystemVersion": "13.0",
         "NSPrincipalClass": "NSApplication", "NSHighResolutionCapable": True,
         "CFBundleDevelopmentRegion": "zh_CN",
         "UTExportedTypeDeclarations": [{"UTTypeIdentifier": "dev.witrn.k2-firmware",
