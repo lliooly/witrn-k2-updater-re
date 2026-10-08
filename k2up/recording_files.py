@@ -32,6 +32,7 @@ def parse_time(text):
     match = re.fullmatch(r"(?:(\d+)\.)?(\d{1,2}):(\d{2}):(\d{2})\.(\d{1,3})", text)
     if not match: raise ValueError("时间应为 [D.]hh:mm:ss.mmm")
     days, hours, minutes, seconds, ms = match.groups()
+    if days and len(days) > 12: raise ValueError("时间超出有效范围")
     if int(hours) > 23 or int(minutes) > 59 or int(seconds) > 59:
         raise ValueError("时间字段超出范围")
     return (int(days or 0) * 86400 + int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(ms.ljust(3, "0")) / 1000)
@@ -51,6 +52,7 @@ def row_sample(row):
     v, i = number(row["Voltage(V)"]), number(row["Current(A)"])
     p = number(row.get("Power(W)"), True)
     if v < 0: raise ValueError("电压不能为负")
+    if not math.isfinite(v * i): raise ValueError("电压乘电流超出数值范围")
     return Sample(t, v, i, p if p is not None else v * abs(i), v * i,
                   temp_out=number(row.get("Temp(°C)"), True),
                   dp=number(row.get("D+(V)"), True), dn=number(row.get("D-(V)"), True))
@@ -155,6 +157,8 @@ def import_record(source, destination, cancelled=lambda: False):
 
 def export_record(source, destination, kind, start=None, end=None, cancelled=lambda: False):
     if kind not in ("csv", "official-sqlite", "local-sqlite"): raise ValueError("导出格式无效")
+    if any(v is not None and (not math.isfinite(v) or v < 0) for v in (start, end)) or (start is not None and end is not None and start > end):
+        raise ValueError("导出区间无效")
     source, destination = Path(source).resolve(strict=True), Path(destination).resolve()
     if source == destination: raise ValueError("导出不能覆盖正在读取的记录")
     db = readonly(source)

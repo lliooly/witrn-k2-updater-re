@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 import time
+import math
 
 from .telemetry import Sample
 
@@ -34,6 +35,8 @@ def validate_local(db):
     names = {r[1] for r in db.execute("PRAGMA table_info(samples)")}
     if not set(COLUMNS).issubset(names):
         raise ValueError("本地记录缺少必要字段")
+    kind = db.execute("SELECT type FROM sqlite_master WHERE name='samples'").fetchone()
+    if not kind or kind[0] != "table": raise ValueError("本地样本必须存放在数据表")
 
 
 def samples(db, start=None, end=None):
@@ -75,6 +78,14 @@ class Recording:
         self.last_commit = time.monotonic()
 
     def append(self, sample):
+        required = (sample.time, sample.voltage, sample.current, sample.power, sample.signed_power, sample.segment)
+        try:
+            valid = all(v is not None and math.isfinite(v) for v in required)
+            valid = valid and all(math.isfinite(v) for v in sample.dictionary().values() if v is not None)
+        except TypeError:
+            valid = False
+        if not valid or sample.time < 0 or sample.voltage < 0 or sample.segment < 0:
+            raise ValueError("记录样本包含非法时间或数值")
         self.db.execute("INSERT INTO samples(" + SQL_COLUMNS + ") VALUES(" +
                         ",".join("?" for _ in COLUMNS) + ")", tuple(getattr(sample, name) for name in COLUMNS))
         self.pending += 1; self.count += 1

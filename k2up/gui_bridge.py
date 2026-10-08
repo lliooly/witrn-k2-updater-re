@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from datetime import datetime
 import json
+import sqlite3
 from pathlib import Path
 import sys
 import time
@@ -19,6 +20,8 @@ from .picture_device import load_backup, transfer_resource
 
 RESOURCE_OPERATIONS = {"resource-read", "resource-write", "resource-restore"}
 OPERATIONS = {"devices", "inspect", "demo-firmware", "probe", "backup", "upgrade"} | RESOURCE_OPERATIONS
+MONITOR_OPERATIONS = {"monitor", "monitor-query", "monitor-import", "monitor-export", "monitor-list"}
+OPERATIONS |= MONITOR_OPERATIONS
 DEMO_FAULTS = {None, "verify", "disconnect", "batch-nack"}
 
 
@@ -74,6 +77,8 @@ def validate_request(request):
         raise ValueError("请明确确认资源写入操作")
     if request["operation"] in RESOURCE_OPERATIONS:
         resource_for(request.get("resource_kind"))
+    if request["operation"] == "monitor" and (request.get("simulation") or not request.get("device_path_hex")):
+        raise ValueError("请选择真实的普通模式 K2 接口")
 
 
 def selected_device(request):
@@ -104,7 +109,7 @@ def verify_identity(identity, request):
         raise ValueError("设备信息已变化，请重新读取设备信息；未开始擦写")
 
 
-def dispatch(request, events):
+def dispatch(request, events, input_stream=None):
     validate_request(request)
     operation = request["operation"]
     simulation = request.get("simulation", False)
@@ -116,6 +121,28 @@ def dispatch(request, events):
         firmware = Firmware.load(request["firmware_path"])
         return {"firmware": firmware.summary(), "firmware_path": str(Path(request["firmware_path"]).resolve()),
                 "demo_firmware": is_demo_firmware(firmware)}
+    if operation in MONITOR_OPERATIONS:
+        from .monitor import run_monitor
+        from .recording import summary
+        from .recording_files import import_record, export_record
+        from .recording_stats import query_record
+        events.stage = "monitor"
+        if operation == "monitor":
+            return run_monitor(request, events, input_stream or sys.stdin)
+        if operation == "monitor-query":
+            return query_record(request["record_path"], request.get("range_start"), request.get("range_end"),
+                                request.get("include_stats", True), budget=1200)
+        if operation == "monitor-import":
+            return import_record(request["record_path"], request["output_path"])
+        if operation == "monitor-export":
+            return export_record(request["record_path"], request["output_path"], request["export_kind"],
+                                 request.get("range_start"), request.get("range_end"))
+        root = Path(request["data_directory"]) / "Recordings"
+        records = []
+        for path in sorted(root.glob("*.sqlite"), key=lambda p: p.stat().st_mtime, reverse=True)[:200]:
+            try: records.append(summary(path))
+            except (ValueError, sqlite3.Error, OSError): continue
+        return {"records": records}
     root = Path(request["data_directory"]).expanduser().resolve()
     if simulation:
         root = root / "Offline Demo"
@@ -253,13 +280,13 @@ def main(input_stream=None, output=None):
         validate_request(request)
         events = Events(request, output)
         events.emit("ready")
-        value = dispatch(request, events)
+        value = dispatch(request, events, input_stream or sys.stdin)
         events.emit("result", value=value)
         return 0
     except KeyboardInterrupt:
         events.emit("error", stage=events.stage, message="已取消只读操作", cancelled=True)
         return 130
-    except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, sqlite3.Error) as exc:
         stage = exc.stage if isinstance(exc, UpgradeError) else events.stage
         events.emit("error", stage=stage, message=str(exc), cancelled=False)
         return 1

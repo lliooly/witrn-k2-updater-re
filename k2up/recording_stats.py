@@ -22,6 +22,8 @@ def interpolate(a, b, t):
         av, bv = getattr(a, name), getattr(b, name)
         values[name] = av + (bv - av) * f if av is not None and bv is not None else None
     values["time"] = t
+    # Absolute derived power is piecewise linear through a sign change.
+    values["power"] = abs(values["signed_power"])
     return type(a)(**values)
 
 
@@ -49,12 +51,18 @@ def statistics(items, start=None, end=None, gap_limit=2, cancelled=lambda: False
         if hi <= lo: continue
         left, right = interpolate(a, b, lo), interpolate(a, b, hi)
         observe(left); observe(right)
+        if left.signed_power * right.signed_power < 0:
+            channel["power"]["min"] = 0
         first = lo if first is None else min(first, lo); last = hi if last is None else max(last, hi)
         dt = hi - lo; coverage += dt
         for key, result in channel.items():
             av, bv = getattr(left, key), getattr(right, key)
             if av is not None and bv is not None:
-                result["area"] += (av + bv) * dt / 2; result["coverage"] += dt
+                if key == "power":
+                    positive, negative = direction_area(left.signed_power, right.signed_power, dt)
+                    result["area"] += positive + negative
+                else: result["area"] += (av + bv) * dt / 2
+                result["coverage"] += dt
         positive, negative = direction_area(left.current, right.current, dt)
         ah_pos += positive / 3600; ah_neg += negative / 3600
         positive, negative = direction_area(left.signed_power, right.signed_power, dt)

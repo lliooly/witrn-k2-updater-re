@@ -15,6 +15,8 @@ class StatisticsTests(unittest.TestCase):
         self.assertAlmostEqual(stats["ah_positive"] * 3600, 1)
         self.assertAlmostEqual(stats["ah_negative"] * 3600, 1)
         self.assertEqual(stats["wh_net"], 0)
+        self.assertEqual(stats["channels"]["power"]["average"], 5)
+        self.assertEqual(stats["channels"]["power"]["min"], 0)
         selected = statistics(items, .5, 1.5)
         self.assertAlmostEqual(selected["ah_absolute"] * 3600, .5)
         self.assertAlmostEqual(selected["coverage"], 1)
