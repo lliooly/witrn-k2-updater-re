@@ -41,6 +41,8 @@ tests/fixtures/
 *.zip
 K2_V*/
 K2Picture_*/
+WITRN_PC_V1.0.4/
+k2_recordings/
 *.i64
 *.id0
 *.id1
