@@ -50,7 +50,7 @@ def main():
                              device_info_sha256=identity["info_sha256"], confirmed=True)
             assert result["simulation_only"] and result["backup"]["simulation_only"]
             assert result["backup"]["two_independent_reads_match"]
-            for kind in ("layout", "background", "startup"):
+            for kind in ("layout", "background", "startup", "emark", "emark-copy"):
                 read = request("resource-read", resource_kind=kind)
                 assert read["simulation_only"] and read["resource_valid"] and read["backup"]["two_reads_match"]
                 from hashlib import sha256

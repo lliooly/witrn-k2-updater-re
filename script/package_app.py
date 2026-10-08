@@ -15,8 +15,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--arch", default="universal2")
+    parser.add_argument("--output", type=Path, default=ROOT / "dist/K2 Updater.app",
+                        help="Generated .app path within dist (allows staging beside a running version)")
     args = parser.parse_args()
-    app = ROOT / "dist/K2 Updater.app"
+    app = args.output.resolve()
+    if not app.is_relative_to(ROOT / "dist") or app.suffix != ".app":
+        parser.error("--output 必须是 dist 内的 .app 构建路径")
     # This is our generated build output only, never user-selected paths.
     if app.exists():
         shutil.rmtree(app)
@@ -46,8 +50,8 @@ def main():
     info = {
         "CFBundleExecutable": "K2Updater", "CFBundleIdentifier": "dev.witrn.k2updater",
         "CFBundleName": "K2 Updater", "CFBundleDisplayName": "WITRN K2",
-        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.3.0",
-        "CFBundleVersion": "4", "LSMinimumSystemVersion": "13.0",
+        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.4.0",
+        "CFBundleVersion": "5", "LSMinimumSystemVersion": "13.0",
         "NSPrincipalClass": "NSApplication", "NSHighResolutionCapable": True,
         "CFBundleDevelopmentRegion": "zh_CN",
         "UTExportedTypeDeclarations": [{"UTTypeIdentifier": "dev.witrn.k2-firmware",
@@ -56,7 +60,11 @@ def main():
                                        {"UTTypeIdentifier": "dev.witrn.k2-project", "UTTypeDescription": "K2 表盘工程",
                                         "UTTypeConformsTo": ["public.data"], "UTTypeTagSpecification": {"public.filename-extension": ["k2project"]}},
                                        {"UTTypeIdentifier": "dev.witrn.k2-picture", "UTTypeDescription": "K2 表盘布局",
-                                        "UTTypeConformsTo": ["public.data"], "UTTypeTagSpecification": {"public.filename-extension": ["pic"]}}]
+                                        "UTTypeConformsTo": ["public.data"], "UTTypeTagSpecification": {"public.filename-extension": ["pic"]}},
+                                       {"UTTypeIdentifier": "dev.witrn.k2-emark-project", "UTTypeDescription": "K2 E-Mark 配置集合",
+                                        "UTTypeConformsTo": ["public.data"], "UTTypeTagSpecification": {"public.filename-extension": ["k2emark"]}},
+                                       {"UTTypeIdentifier": "dev.witrn.k2-emark", "UTTypeDescription": "WITRN E-Mark 配置",
+                                        "UTTypeConformsTo": ["public.data"], "UTTypeTagSpecification": {"public.filename-extension": ["wtemark"]}}]
     }
     if icon.exists():
         info["CFBundleIconFile"] = icon.name
