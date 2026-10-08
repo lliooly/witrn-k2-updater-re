@@ -10,6 +10,7 @@ final class BackendClient {
     private var stderrText = ""
     private var finished: ((Int32, Error?) -> Void)?
     private var jobID: String?
+    private var controlInput: FileHandle?
 
     func start(_ request: BackendRequest, onEvent: @escaping (BackendEvent) -> Void,
                onFinish: @escaping (Int32, Error?) -> Void) throws {
@@ -77,7 +78,8 @@ final class BackendClient {
             try child.run()
             process = child
             try input.fileHandleForWriting.write(contentsOf: WireCodec.requestData(request))
-            try input.fileHandleForWriting.close()
+            if request.operation == .monitor { controlInput = input.fileHandleForWriting }
+            else { try input.fileHandleForWriting.close() }
         } catch {
             output.fileHandleForReading.readabilityHandler = nil
             errors.fileHandleForReading.readabilityHandler = nil
@@ -91,9 +93,15 @@ final class BackendClient {
         guard stdoutEnded, let status = exitStatus else { return }
         let callback = finished
         let error = protocolError
+        try? controlInput?.close(); controlInput = nil
         process = nil; finished = nil; jobID = nil
         callback?(status, error)
     }
 
     func cancelReadOnly() { process?.interrupt() }
+    func sendControl(_ fields: [String: JSONValue]) throws {
+        guard let controlInput else { throw NSError(domain: "K2", code: 3, userInfo: [NSLocalizedDescriptionKey: "采集后台未连接"]) }
+        var data = try JSONEncoder().encode(fields); data.append(10)
+        try controlInput.write(contentsOf: data)
+    }
 }

@@ -39,6 +39,7 @@ public enum JSONValue: Codable, Equatable, Sendable {
 public enum BackendOperation: String, Codable, Sendable {
     case devices, inspect, probe, backup, upgrade
     case resourceRead = "resource-read", resourceWrite = "resource-write", resourceRestore = "resource-restore"
+    case monitor, monitorQuery = "monitor-query", monitorImport = "monitor-import", monitorExport = "monitor-export", monitorList = "monitor-list"
     public var canCancel: Bool { !isWrite }
     public var isWrite: Bool { self == .upgrade || self == .resourceWrite || self == .resourceRestore }
 }
@@ -60,6 +61,12 @@ public struct BackendRequest: Encodable, Sendable {
     public var resourceSha256: String?
     public var restoreManifestPath: String?
     public var restoreManifestSha256: String?
+    public var recordPath: String?
+    public var outputPath: String?
+    public var exportKind: String?
+    public var rangeStart: Double?
+    public var rangeEnd: Double?
+    public var includeStats: Bool?
 
     public init(operation: BackendOperation, dataDirectory: String) {
         self.operation = operation; self.dataDirectory = dataDirectory

@@ -2,15 +2,16 @@ import SwiftUI
 import K2Core
 
 enum ToolSection: String, CaseIterable, Identifiable {
-    case firmware = "固件升级", dial = "表盘", startup = "开机图", emark = "虚拟 E-Mark"
+    case firmware = "固件升级", dial = "表盘", startup = "开机图", emark = "虚拟 E-Mark", monitor = "曲线与记录"
     var id: String { rawValue }
-    var symbol: String { switch self { case .firmware: return "arrow.triangle.2.circlepath"; case .dial: return "speedometer"; case .startup: return "photo"; case .emark: return "cable.connector" } }
+    var symbol: String { switch self { case .firmware: return "arrow.triangle.2.circlepath"; case .dial: return "speedometer"; case .startup: return "photo"; case .emark: return "cable.connector"; case .monitor: return "chart.xyaxis.line" } }
 }
 
 struct ContentView: View {
     @ObservedObject var store: UpdaterStore
     @ObservedObject var picture: PictureStore
     @ObservedObject var emark: EmarkStore
+    @ObservedObject var monitor: MonitorStore
     @Binding var selection: ToolSection?
     @State private var restoreIntent: ResourceWriteIntent?
     var body: some View {
@@ -20,6 +21,9 @@ struct ContentView: View {
             }.navigationSplitViewColumnWidth(min: 130, ideal: 155, max: 180)
             .safeAreaInset(edge: .bottom) { Text("WITRN K2\n独立维护工具").font(.caption).foregroundStyle(.secondary).padding(16) }
         } detail: {
+            if selection == .monitor {
+                MonitorView(monitor: monitor, updater: store)
+            } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     DeviceCard(store: store)
@@ -28,6 +32,7 @@ struct ContentView: View {
                     case .dial: PictureView(picture: picture, store: store, startup: false)
                     case .startup: PictureView(picture: picture, store: store, startup: true)
                     case .emark: EmarkView(emark: emark, store: store)
+                    case .monitor: EmptyView()
                     }
                     ProgressCard(store: store)
                     HStack {
@@ -39,6 +44,7 @@ struct ContentView: View {
                     }
                 }.padding(22)
             }.frame(minWidth: 775)
+            }
         }
         .frame(minWidth: 950, minHeight: 720)
         .task { store.refreshDevices() }
@@ -47,7 +53,7 @@ struct ContentView: View {
                 Button { emark.newProject() } label: { Label("新建配置集合", systemImage: "doc.badge.plus") }.disabled(store.isBusy)
                 Button { emark.undo() } label: { Label("撤销", systemImage: "arrow.uturn.backward") }.disabled(store.isBusy || !emark.undoAvailable)
                 Button { emark.redo() } label: { Label("重做", systemImage: "arrow.uturn.forward") }.disabled(store.isBusy || !emark.redoAvailable)
-            } else if selection != .firmware {
+            } else if selection != .firmware && selection != .monitor {
                 Button { picture.newProject() } label: { Label("新建工程", systemImage: "doc.badge.plus") }.disabled(store.isBusy)
                 Button { picture.undo() } label: { Label("撤销", systemImage: "arrow.uturn.backward") }.disabled(store.isBusy || !picture.undoAvailable)
                 Button { picture.redo() } label: { Label("重做", systemImage: "arrow.uturn.forward") }.disabled(store.isBusy || !picture.redoAvailable)

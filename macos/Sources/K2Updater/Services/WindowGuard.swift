@@ -5,7 +5,8 @@ struct WindowGuard: NSViewRepresentable {
     let store: UpdaterStore
     let picture: PictureStore
     let emark: EmarkStore
-    func makeCoordinator() -> Coordinator { Coordinator(store, picture, emark) }
+    let monitor: MonitorStore
+    func makeCoordinator() -> Coordinator { Coordinator(store, picture, emark, monitor) }
     func makeNSView(context: Context) -> NSView { NSView() }
     func updateNSView(_ view: NSView, context: Context) {
         DispatchQueue.main.async {
@@ -31,8 +32,9 @@ struct WindowGuard: NSViewRepresentable {
         let store: UpdaterStore
         let picture: PictureStore
         let emark: EmarkStore
+        let monitor: MonitorStore
         weak var originalDelegate: NSWindowDelegate?
-        init(_ store: UpdaterStore, _ picture: PictureStore, _ emark: EmarkStore) { self.store = store; self.picture = picture; self.emark = emark }
+        init(_ store: UpdaterStore, _ picture: PictureStore, _ emark: EmarkStore, _ monitor: MonitorStore) { self.store = store; self.picture = picture; self.emark = emark; self.monitor = monitor }
         override func responds(to selector: Selector!) -> Bool {
             super.responds(to: selector) || originalDelegate?.responds(to: selector) == true
         }
@@ -43,6 +45,7 @@ struct WindowGuard: NSViewRepresentable {
         func windowShouldClose(_ sender: NSWindow) -> Bool {
             if store.isBusy { WindowGuard.explainBusy(store); return false }
             guard picture.allowDiscard(), emark.allowDiscard() else { return false }
+            guard monitor.prepareClose({ [weak sender] in sender?.performClose(nil) }) else { return false }
             return originalDelegate?.windowShouldClose?(sender) ?? true
         }
     }

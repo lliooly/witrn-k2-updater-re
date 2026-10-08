@@ -23,6 +23,7 @@ final class UpdaterStore: ObservableObject {
     @Published var firmwareURL: URL?
     @Published var isDemoFirmware = false
     @Published var isBusy = false
+    @Published var monitorConnected = false
     @Published var operation: BackendOperation?
     @Published var stage = "preflight"
     @Published var current = 0
@@ -49,7 +50,7 @@ final class UpdaterStore: ObservableObject {
     }
 
     var selectedDevice: DeviceInfo? { devices.first { $0.pathHex == selectedPath } }
-    var canProbe: Bool { !isBusy && selectedDevice != nil && dfuConfirmed }
+    var canProbe: Bool { !isBusy && !monitorConnected && selectedDevice != nil && dfuConfirmed }
     var canUpgrade: Bool {
         canProbe && identity?.confirmedK2 == true && firmware != nil && !isDemoFirmware
     }
@@ -103,6 +104,9 @@ final class UpdaterStore: ObservableObject {
     private func run(_ action: BackendOperation, confirmed: Bool = false, resource: PictureResource? = nil,
                      payload: URL? = nil, digest: String? = nil) {
         guard !isBusy else { return }
+        guard !monitorConnected || action == .devices || action == .inspect else {
+            errorMessage = "请先在曲线页面断开采集，再进行设备维护操作"; return
+        }
         var request = BackendRequest(operation: action, dataDirectory: dataDirectory.path)
         request.firmwarePath = firmwareURL?.path
         request.firmwareSha256 = firmware?.fileSha256
