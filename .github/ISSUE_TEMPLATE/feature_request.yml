@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest an improvement to the analysis or offline tools.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety and data
+      options:
+        - label: This request does not require publishing firmware, device backups, or unredacted hardware traces.
+          required: true

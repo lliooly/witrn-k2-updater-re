@@ -1,0 +1,37 @@
+name: Bug report
+description: Report a reproducible problem in the parser, simulator, or CLI.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach firmware, device backups, raw hardware logs, serial numbers, or private paths. Redact device-specific data before sharing.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Include the command and a redacted error message.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Prefer synthetic or simulator-only reproduction steps.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, and project revision.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Never include raw `.k2` files, backups, serial numbers, or unredacted HID traces.
+    validations:
+      required: false
