@@ -1,5 +1,6 @@
 # Local Python environments and caches
 .venv/
+.venv-app/
 venv/
 __pycache__/
 *.py[cod]
@@ -24,6 +25,8 @@ k2_logs/
 k2_backups/
 *.partial
 tests/fixtures/
+*.k2project
+*.k2image
 
 # Vendor applications, firmware, and generated/recovered binaries
 *.dll
@@ -34,6 +37,7 @@ tests/fixtures/
 *.k2
 *.zip
 K2_V*/
+K2Picture_*/
 *.i64
 *.id0
 *.id1
@@ -61,5 +65,7 @@ docs/superpowers/
 # Build and coverage output
 build/
 dist/
+.build/
+.swiftpm/
 htmlcov/
 coverage.xml
