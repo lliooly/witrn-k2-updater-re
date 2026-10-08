@@ -35,7 +35,10 @@ struct ContentView: View {
             }.listStyle(.sidebar)
                 .navigationSplitViewColumnWidth(min: 145, ideal: 155, max: 180)
                 .safeAreaInset(edge: .bottom) {
-                    Text("WITRN K2\n独立维护工具").font(.caption).foregroundStyle(.secondary).padding(16)
+                    VStack(spacing: 4) {
+                        Text("WITRN K2").font(.callout.weight(.semibold))
+                        Text("独立维护工具").font(.caption).foregroundStyle(.secondary)
+                    }.padding(16)
                 }
         } detail: {
             VStack(spacing: 0) {
@@ -61,11 +64,19 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup {
                 Menu {
-                    Button("恢复资源备份…") { restoreIntent = store.chooseResourceBackup() }.disabled(!store.canUseResources)
+                    Button { restoreIntent = store.chooseResourceBackup() } label: {
+                        Label("恢复资源备份", systemImage: "clock.arrow.circlepath")
+                    }.disabled(!store.canUseResources)
                     Divider()
-                    Button("打开备份文件夹") { store.showBackup() }.disabled(store.backupPath == nil)
-                    Button("查看日志") { store.showLog() }.disabled(store.tracePath == nil)
-                } label: { Label("维护", systemImage: "wrench.and.screwdriver") }
+                    Button { store.showBackup() } label: {
+                        Label("打开备份文件夹", systemImage: "folder")
+                    }.disabled(store.backupPath == nil)
+                    Button { store.showLog() } label: {
+                        Label("查看日志", systemImage: "doc.text")
+                    }.disabled(store.tracePath == nil)
+                } label: {
+                    Label("维护", systemImage: "wrench.and.screwdriver")
+                }
                 ConnectionToolbarButton(updater: store, monitor: monitor, expanded: $connectionExpanded)
             }
         }
@@ -73,7 +84,7 @@ struct ContentView: View {
             Button("取消", role: .cancel) { restoreIntent = nil }
             Button("备份并恢复") { if let intent = restoreIntent { store.writeResource(intent) }; restoreIntent = nil }
         } message: {
-            Text("恢复到备份中的完整资源扇区。后台会核对备份摘要和设备身份，先双遍备份当前数据，再擦写和完整读回校验。请保持连接。")
+            Text("恢复到备份中的完整资源扇区。后台会核对备份摘要和设备身份，先双遍备份当前数据，再擦写和完整读回校验。请保持连接")
         }
     }
 

@@ -6,26 +6,26 @@ struct DialElementTable: View {
     @ObservedObject var picture: PictureStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("表盘元素").font(.headline)
-            Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: 8) {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("表盘元素").font(.title3.weight(.semibold))
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 10) {
                 GridRow {
-                    Text("元素").frame(width: 70, alignment: .leading)
-                    Text("显示").frame(width: 36)
-                    Text("X").frame(width: 60)
-                    Text("Y").frame(width: 60)
-                    Text("颜色").frame(width: 32)
-                    Text("字号").frame(width: 74)
-                    Text("小数位").frame(width: 60)
-                }.font(.caption).foregroundStyle(.secondary)
+                    Text("元素").frame(width: 74, alignment: .leading)
+                    Text("显示").frame(width: 40)
+                    Text("X").frame(width: 64)
+                    Text("Y").frame(width: 64)
+                    Text("颜色").frame(width: 36)
+                    Text("字号").frame(width: 80)
+                    Text("小数位").frame(width: 64)
+                }.font(.callout).foregroundStyle(.secondary)
                 ForEach(picture.project.layout.elements) { element in
                     DialElementRow(picture: picture, elementID: element.id)
                 }
             }.controlSize(.small)
-            Text("点击元素名称可在画布中选中。X / Y 为设备坐标；图标不设置字号，没有小数位的元素显示 —。")
-                .font(.caption).foregroundStyle(.secondary).frame(maxWidth: 428, alignment: .leading)
+            Text("点击元素名称可在画布中选中。X / Y 为设备坐标；图标不设置字号，没有小数位的元素显示 —")
+                .font(.callout).foregroundStyle(.secondary).frame(maxWidth: 440, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-        }.padding(12).background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+        }.padding(14).background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -40,16 +40,16 @@ private struct DialElementRow: View {
             Button { picture.selectedElement = elementID } label: {
                 Text(element.title).fontWeight(picture.selectedElement == elementID ? .semibold : .regular)
                     .foregroundStyle(picture.selectedElement == elementID ? Color.accentColor : Color.primary)
-                    .frame(width: 70, alignment: .leading)
+                    .frame(width: 74, alignment: .leading)
             }.buttonStyle(.plain).help("在画布中选中\(element.title)")
             Toggle("显示\(element.title)", isOn: Binding(get: { element.enabled == 1 }, set: { editing.setVisible($0) }))
-                .toggleStyle(.switch).labelsHidden().frame(width: 36)
-            DialCoordinateField(picture: picture, elementID: elementID, xAxis: true).frame(width: 60)
-            DialCoordinateField(picture: picture, elementID: elementID, xAxis: false).frame(width: 60)
+                .toggleStyle(.switch).labelsHidden().frame(width: 40)
+            DialCoordinateField(picture: picture, elementID: elementID, xAxis: true).frame(width: 64)
+            DialCoordinateField(picture: picture, elementID: elementID, xAxis: false).frame(width: 64)
             ColorPicker("\(element.title)颜色", selection: Binding(get: { element.swiftColor }, set: { editing.setColor($0) }), supportsOpacity: true)
-                .labelsHidden().frame(width: 32)
+                .labelsHidden().frame(width: 36)
             if element.isIcon {
-                Text("—").foregroundStyle(.secondary).frame(width: 74)
+                Text("—").foregroundStyle(.secondary).frame(width: 80)
                     .help("图标不设置字号")
             } else {
                 Picker("\(element.title)字号", selection: Binding(get: { Int(element.font) }, set: { editing.setFont($0) })) {
@@ -57,16 +57,16 @@ private struct DialElementRow: View {
                     if Int(element.font) >= DialElement.fontTitles.count {
                         Text("未知 \(element.font)").tag(Int(element.font)).disabled(true)
                     }
-                }.labelsHidden().frame(width: 74)
+                }.labelsHidden().frame(width: 80)
             }
             if let index = element.precisionIndex {
                 let current = picture.project.layout.precision(index)
                 Picker("\(element.title)小数位", selection: Binding(get: { picture.project.layout.precision(index) }, set: { editing.setPrecision($0) })) {
                     ForEach(Array(element.precisionRange), id: \.self) { Text(String($0)).tag($0) }
                     if !element.precisionRange.contains(current) { Text(String(current)).tag(current).disabled(true) }
-                }.labelsHidden().frame(width: 60)
+                }.labelsHidden().frame(width: 64)
             } else {
-                Text("—").foregroundStyle(.secondary).frame(width: 60)
+                Text("—").foregroundStyle(.secondary).frame(width: 64)
                     .help("此元素没有小数位设置")
             }
         }.font(.callout)

@@ -24,7 +24,7 @@ struct PictureView: View {
             Button("取消", role: .cancel) { writeIntent = nil }
             Button("备份并\(writeIntent?.restoring == true ? "恢复" : "写入")") { if let intent = writeIntent { store.writeResource(intent) }; writeIntent = nil }
         } message: {
-            Text("先读取目标资源的完整扇区两遍并保存备份，再擦除、写入并完整读回校验。仅操作\(writeIntent?.kind.title ?? "资源")。期间请保持连接。")
+            Text("先读取目标资源的完整扇区两遍并保存备份，再擦除、写入并完整读回校验。仅操作\(writeIntent?.kind.title ?? "资源")。期间请保持连接")
         }
         .alert("文件操作失败", isPresented: Binding(get: { picture.error != nil }, set: { if !$0 { picture.error = nil } })) {
             Button("好", role: .cancel) { picture.error = nil }
@@ -33,19 +33,31 @@ struct PictureView: View {
         .overlay { if dropTarget { RoundedRectangle(cornerRadius: 8).stroke(.blue, lineWidth: 2).allowsHitTesting(false) } }
     }
     private var deviceControls: some View {
-        GroupBox("设备操作") {
-            VStack(alignment: .leading, spacing: 12) {
-                if !startup {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 20) { resourceButtons(.layout); Spacer(); resourceButtons(.background) }
-                        VStack(alignment: .leading, spacing: 16) { resourceButtons(.layout); Divider(); resourceButtons(.background) }
+        VStack(alignment: .leading, spacing: 14) {
+            Text("设备操作").font(.headline)
+            if !startup {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 24) {
+                        resourceButtons(.layout)
+                        Divider()
+                        resourceButtons(.background)
                     }
-                } else { resourceButtons(.startup) }
-                if !store.canUseResources { ResourceAvailabilityHint(store: store) }
-                Text(startup ? "每次写入后重新进入 DFU，再进行其他操作。" : "背景和布局分别写入，每次完成后重新进入 DFU。最后在 K2 设置 → 6 主题屏开关中开启表盘。")
-                    .font(.caption).foregroundStyle(.secondary)
-            }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
-        }
+                    VStack(alignment: .leading, spacing: 16) {
+                        resourceButtons(.layout)
+                        Divider()
+                        resourceButtons(.background)
+                    }
+                }
+            } else {
+                resourceButtons(.startup)
+            }
+            if !store.canUseResources { ResourceAvailabilityHint(store: store) }
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
+                Text(startup ? "每次写入后重新进入 DFU，再进行其他操作" : "背景和布局分别写入，每次完成后重新进入 DFU。最后在 K2 设置 → 6 主题屏开关中开启表盘")
+                    .font(.callout).foregroundStyle(.orange)
+            }
+        }.padding(14).background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
     }
     private var dialEditor: some View {
         ViewThatFits(in: .horizontal) {
@@ -60,22 +72,35 @@ struct PictureView: View {
         }
     }
     private var dialPreview: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("240 × 240").font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Label("240 × 240", systemImage: "viewfinder").font(.callout).foregroundStyle(.secondary)
                 Spacer()
-                Picker("缩放", selection: $scale) { Text("100%").tag(1.0); Text("150%").tag(1.5); Text("200%").tag(2.0) }.frame(width: 130)
+                Picker("缩放", selection: $scale) {
+                    Text("100%").tag(1.0)
+                    Text("150%").tag(1.5)
+                    Text("200%").tag(2.0)
+                }.frame(width: 140)
             }
-            ScrollView([.horizontal, .vertical]) { DialCanvas(picture: picture, scale: scale).padding(4) }
-                .frame(minHeight: 375, idealHeight: 390)
-            Text("示例读数 · 字体和基线预览与实机可能不同\n点击选择，拖动定位，方向键微调 1 像素。")
-                .font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Button("导入背景…") { picture.chooseImage(.background) }
-                Menu("背景操作") {
-                    Button("移除背景") { picture.edit { $0.background = nil } }.disabled(picture.project.background == nil)
-                    Button("导出背景 BMP…") { picture.export(.background) }.disabled(picture.project.background == nil)
-                }.fixedSize()
+            ScrollView([.horizontal, .vertical]) {
+                DialCanvas(picture: picture, scale: scale).padding(6)
+            }.frame(minHeight: 390, idealHeight: 400)
+            Text("点击选择，拖动定位，方向键微调 1 像素")
+                .font(.callout).foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Button { picture.chooseImage(.background) } label: {
+                    Label("导入背景", systemImage: "photo.badge.plus")
+                }.buttonStyle(.borderedProminent)
+                Menu {
+                    Button { picture.edit { $0.background = nil } } label: {
+                        Label("移除背景", systemImage: "trash")
+                    }.disabled(picture.project.background == nil)
+                    Button { picture.export(.background) } label: {
+                        Label("导出 BMP", systemImage: "square.and.arrow.up")
+                    }.disabled(picture.project.background == nil)
+                } label: {
+                    Label("背景操作", systemImage: "ellipsis.circle")
+                }
                 Spacer()
             }
         }.frame(maxWidth: .infinity)
@@ -94,25 +119,38 @@ struct PictureView: View {
         }.frame(width: 352.5, height: 352.5)
     }
     private var startupImageActions: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("235 × 235 像素").font(.headline)
-            Text("支持 BMP、PNG 和 JPEG。导入时调整裁剪或缩放，确认后保存到工程。").foregroundStyle(.secondary)
-            Button(picture.project.startup == nil ? "导入图片…" : "替换图片…") { picture.chooseImage(.startup) }
-                .buttonStyle(.borderedProminent)
-            Menu("图片操作") {
-                Button("导出 BMP…") { picture.export(.startup) }.disabled(picture.project.startup == nil)
-                Button("移除图片") { picture.edit { $0.startup = nil } }.disabled(picture.project.startup == nil)
-            }.fixedSize()
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("235 × 235 像素").font(.title3.weight(.semibold))
+                Text("支持 BMP、PNG 和 JPEG。导入时调整裁剪或缩放，确认后保存到工程").foregroundStyle(.secondary).font(.callout)
+            }
+            Button { picture.chooseImage(.startup) } label: {
+                Label(picture.project.startup == nil ? "导入图片" : "替换图片", systemImage: "photo.badge.plus")
+            }.buttonStyle(.borderedProminent).controlSize(.large)
+            Menu {
+                Button { picture.export(.startup) } label: {
+                    Label("导出 BMP", systemImage: "square.and.arrow.up")
+                }.disabled(picture.project.startup == nil)
+                Button { picture.edit { $0.startup = nil } } label: {
+                    Label("移除图片", systemImage: "trash")
+                }.disabled(picture.project.startup == nil)
+            } label: {
+                Label("图片操作", systemImage: "ellipsis.circle")
+            }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private func resourceButtons(_ kind: PictureResource) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(kind.title).font(.headline)
-            HStack {
-                Button("读取并备份") { store.readResource(kind) { picture.acceptRead($0, kind: $1) } }.disabled(!store.canUseResources)
-                Button("写入\(kind.title)") {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(kind.title).font(.title3.weight(.semibold))
+            HStack(spacing: 10) {
+                Button { store.readResource(kind) { picture.acceptRead($0, kind: $1) } } label: {
+                    Label("读取", systemImage: "arrow.down.circle.fill")
+                }.disabled(!store.canUseResources)
+                Button {
                     do { writeIntent = ResourceWriteIntent(kind: kind, data: try picture.resourceData(kind), manifest: nil, manifestHash: nil) }
                     catch { picture.error = error.localizedDescription }
+                } label: {
+                    Label("写入", systemImage: "arrow.up.circle.fill")
                 }.buttonStyle(.borderedProminent).disabled(!store.canUseResources || (kind == .background && picture.project.background == nil) || (kind == .startup && picture.project.startup == nil))
             }
         }
