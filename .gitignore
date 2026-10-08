@@ -27,6 +27,9 @@ k2_backups/
 tests/fixtures/
 *.k2project
 *.k2image
+*.k2emark
+*.k2emarkbin
+*.wtemark
 
 # Vendor applications, firmware, and generated/recovered binaries
 *.dll

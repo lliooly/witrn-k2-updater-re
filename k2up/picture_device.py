@@ -118,7 +118,8 @@ def transfer_resource(request, events, protocol, identity, directory):
     operation = request["operation"]
     if operation == "resource-read":
         data = original[:resource.size]
-        path = Path(directory) / ("layout.pic" if resource.kind == "layout" else resource.kind + ".k2image")
+        filenames = {"layout": "layout.pic", "emark": "configurations.k2emarkbin", "emark-copy": "copied.wtemark"}
+        path = Path(directory) / filenames.get(resource.kind, resource.kind + ".k2image")
         durable_write(path, data)
         try:
             resource.validate(data)

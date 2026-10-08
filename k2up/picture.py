@@ -30,6 +30,9 @@ class Resource:
     def validate(self, data):
         if len(data) != self.size:
             raise ValueError(f"{self.kind} 数据长度错误：{len(data)}，预期 {self.size}")
+        if self.kind in ("emark", "emark-copy"):
+            from .emark import validate_bank, validate_record
+            return validate_bank(data) if self.kind == "emark" else validate_record(data)
         if data[:4] != MAGIC or data[-4:] != MAGIC:
             raise ValueError("资源头尾标记错误")
         if self.kind == "layout":
@@ -50,6 +53,8 @@ class Resource:
 
 RESOURCES = {
     "background": Resource("background", 0x080C6800, 115208, 57, 240),
+    "emark-copy": Resource("emark-copy", 0x080E3000, 66, 1),
+    "emark": Resource("emark", 0x080E3800, 666, 1),
     "layout": Resource("layout", 0x080E4000, 400, 1),
     "startup": Resource("startup", 0x080E4800, 110458, 54, 235),
 }
@@ -59,7 +64,7 @@ def resource_for(kind):
     try:
         return RESOURCES[kind]
     except (KeyError, TypeError):
-        raise ValueError("资源类型必须是 layout、background 或 startup") from None
+        raise ValueError("未知的 K2 资源类型") from None
 
 
 def sha(data):

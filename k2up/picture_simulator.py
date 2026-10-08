@@ -12,8 +12,12 @@ class PictureTransport(DemoTransport):
         self.memory.extend(b"\xff" * (0x080ff800 - APP_START - len(self.memory)))
         self.fault = fault
         for resource in RESOURCES.values():
-            data = bytearray(resource.size)
-            data[:4] = data[-4:] = MAGIC
+            if resource.kind in ("emark", "emark-copy"):
+                from .emark import sample_bank, sample_record
+                data = sample_bank() if resource.kind == "emark" else sample_record()
+            else:
+                data = bytearray(resource.size)
+                data[:4] = data[-4:] = MAGIC
             offset = resource.address - APP_START
             self.memory[offset:offset + len(data)] = data
         self.read_count = 0

@@ -17,6 +17,9 @@ from k2up.firmware import APP_START
 
 
 def payload(kind):
+    if kind in ("emark", "emark-copy"):
+        from k2up.emark import sample_bank, sample_record
+        return sample_bank() if kind == "emark" else sample_record()
     r = resource_for(kind)
     data = bytearray(r.size); data[:4] = data[-4:] = MAGIC
     return bytes(data)
@@ -38,14 +41,16 @@ class PictureTests(unittest.TestCase):
         for a,b in zip(resources,resources[1:]):
             self.assertLessEqual(a.address+a.allocation,b.address)
         self.assertEqual([(r.kind,r.address,r.sectors) for r in resources],
-                         [('background',0x080c6800,57),('layout',0x080e4000,1),('startup',0x080e4800,54)])
+                         [('background',0x080c6800,57),('emark-copy',0x080e3000,1),('emark',0x080e3800,1),('layout',0x080e4000,1),('startup',0x080e4800,54)])
         with self.assertRaises(ValueError): resource_for('firmware')
 
     def test_payload_validation(self):
         for kind,r in RESOURCES.items():
             self.assertEqual(r.validate(payload(kind)),payload(kind))
             with self.assertRaises(ValueError): r.validate(payload(kind)[:-1])
-            with self.assertRaises(ValueError): r.validate(b'bad!' + payload(kind)[4:])
+            damaged = bytearray(payload(kind))
+            damaged[71 if kind == 'emark' else 0] ^= 1
+            with self.assertRaises(ValueError): r.validate(damaged)
         data=bytearray(payload('layout'));data[12]=2
         with self.assertRaises(ValueError): resource_for('layout').validate(data)
 
@@ -84,32 +89,35 @@ class PictureTests(unittest.TestCase):
                 self.assertEqual(erases,list(r.addresses))
 
     def test_backup_disk_failure_prevents_erase(self):
-        with tempfile.TemporaryDirectory() as root:
-            t,p,identity=connected(); r=resource_for('layout')
-            with patch('k2up.picture_device.durable_write', side_effect=OSError('disk full')):
-                with self.assertRaises(OSError): backup_resource(p,r,identity,Path(root)/'backup',lambda *a:None)
-            self.assertFalse(t.erased)
+        for kind in ('layout', 'emark', 'emark-copy'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as root:
+                t,p,identity=connected(); r=resource_for(kind)
+                with patch('k2up.picture_device.durable_write', side_effect=OSError('disk full')):
+                    with self.assertRaises(OSError): backup_resource(p,r,identity,Path(root)/'backup',lambda *a:None)
+                self.assertFalse(t.erased)
 
     def test_second_read_mismatch_prevents_erase_and_no_valid_manifest(self):
-        with tempfile.TemporaryDirectory() as root:
-            t,p,identity=connected();r=resource_for('layout')
-            original=p.read_memory;count=[0]
-            def unstable(address,size):
-                count[0]+=1;data=original(address,size)
-                return bytes([data[0]^1])+data[1:] if count[0]>2 else data
-            with patch.object(p,'read_memory',side_effect=unstable):
-                with self.assertRaises(ProtocolError): backup_resource(p,r,identity,Path(root)/'backup',lambda *a:None)
-            self.assertFalse(t.erased);self.assertFalse((Path(root)/'backup/manifest.json').exists())
+        for kind in ('layout', 'emark', 'emark-copy'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as root:
+                t,p,identity=connected();r=resource_for(kind)
+                original=p.read_memory;count=[0]
+                def unstable(address,size):
+                    count[0]+=1;data=original(address,size)
+                    return bytes([data[0]^1])+data[1:] if count[0]>2 else data
+                with patch.object(p,'read_memory',side_effect=unstable):
+                    with self.assertRaises(ProtocolError): backup_resource(p,r,identity,Path(root)/'backup',lambda *a:None)
+                self.assertFalse(t.erased);self.assertFalse((Path(root)/'backup/manifest.json').exists())
 
     def test_write_failures_do_not_exit(self):
-        r=resource_for('layout')
-        for fault in ('verify','disconnect','batch-nack'):
-            with self.subTest(fault=fault):
-                t,p,_=connected(fault)
-                with self.assertRaises((ProtocolError,OSError)):
-                    write_resource(p,r,payload('layout')+b'\xff'*(r.allocation-r.size),lambda *a:None)
-                self.assertFalse(t.exited)
-                if fault=='batch-nack': self.assertFalse(t.written)
+        for kind in ('layout', 'emark', 'emark-copy'):
+            r=resource_for(kind)
+            for fault in ('verify','disconnect','batch-nack'):
+                with self.subTest(kind=kind, fault=fault):
+                    t,p,_=connected(fault)
+                    with self.assertRaises((ProtocolError,OSError)):
+                        write_resource(p,r,payload(kind)+b'\xff'*(r.allocation-r.size),lambda *a:None)
+                    self.assertFalse(t.exited)
+                    if fault=='batch-nack': self.assertFalse(t.written)
 
     def test_arbitrary_address_refused_before_any_command(self):
         t,p,_=connected();sent=len(t.sent)
