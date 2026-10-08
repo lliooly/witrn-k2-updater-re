@@ -1,0 +1,71 @@
+# macOS 图形版
+
+K2 Updater 使用 SwiftUI 窗口和已验证的 Python 升级核心。Python、HIDAPI 和协议查表数据随 `.app` 一起打包；运行应用不需要终端、Python 安装或开发环境。应用不包含官方固件。
+
+## 使用
+
+打开 `dist/K2 Updater.app`，也可以把它复制到「应用程序」。最低系统目标为 macOS 13，构建产物为 Universal 2，包含 Apple Silicon 和 Intel 架构。
+
+首版通过窗口中的文件选择或拖入接收固件，不注册 Finder 双击固件的打开关联。
+
+1. 从厂商渠道取得适合 K2 的 `.k2` 文件，在窗口中选择或拖入，检查型号和目标版本。
+2. 按住设备减号键，从 CC1/HID 口使用数据线连接 Mac，进入 DFU。
+3. 刷新设备，选择接口，勾选「已按住减号键连接，进入 DFU」，点击「读取设备信息」。
+4. 可先点击「仅备份固件」。点击「备份并升级」并确认后，程序仍会重新读取两遍完整备份；两遍一致并生成恢复容器后才擦写。
+5. 等待正文读回校验、提交及退出完成，再检查设备屏幕上的版本。完成后可以直接打开备份文件夹或定位日志。
+
+升级时不能更换固件、设备，正常关闭窗口和 ⌘Q 会被拦截；只读操作可以取消。系统强制退出、断电和拔线不受窗口保护控制。失败会停止流程并显示阶段与原因，不会自动重试；擦写后的失败需要保留备份并重新判断设备状态。
+
+备份和日志默认位于 `~/Library/Application Support/K2 Updater/` 的 `Backups`、`Logs` 中；每次操作有独立目录或文件。备份包含 `flash.bin`、`app.bin`、`bootloader-and-info.bin`、恢复 `.k2` 和 `manifest.json`。恢复容器经过离线内容核对，恢复刷写本身没有实机验证。日志和备份可能包含设备信息，请勿直接公开。
+
+图形界面只提供真实设备操作，已移除离线演示、故障注入和合成固件入口；启动参数也不能启用模拟界面。合成测试固件及其恢复容器仍会被拒绝写入真实设备。
+
+## 表盘和开机图（0.3.0）
+
+侧边栏提供「表盘」和「开机图」。未连接设备也可编辑。打开工程／`.pic` 使用 ⌘O，保存工程使用 ⌘S，另存为使用 ⇧⌘S；项目自己的 `.k2project` 文件包含布局、背景与开机图。工程修改可撤销／重做，关闭时提示保存。
+
+表盘画布显示固定示例读数，可选 100%／150%／200% 缩放。点击选中元素后拖动，方向键微调 1 像素。右侧可选择全部 17 个已识别元素，调整开关、X/Y、颜色、七档设备字号与数字小数位（电压／电流 2…7，功率／Wh 3…7，D±／CC1／CC2 2…3，与官方选项一致）。存储的 Y 是设备坐标，文字预览按官方保存方式加上字号高度，仍与实机字形及基线可能不同。未知元素和保留字节在导入、编辑和导出时保留。
+
+背景为 240 × 240，开机图为 235 × 235。导入 BMP、PNG 或 JPEG 后，明确选择裁剪填满（可缩放和移位）、完整保留（黑色留边）或拉伸；确认后再用于写入。透明区域与留边填充黑色。导出菜单分别生成官方 `.pic` 和 24 位 BMP；工程与这两类官方文件不同。
+
+读取设备资源必须先进入 DFU、刷新接口并读取设备信息。「读取并备份」会双遍读取完整扇区，保存原始数据并加载到工程；尚未设置有效资源时只保留原始备份并报告格式问题。每次资源写入先双遍备份、持久化数据和清单，再擦除、合并原扇区尾部数据回写，最后完整扇区读回比较。任何错误立即停止，失败不会发送退出命令。
+
+背景、布局、开机图独立写入；每次完成后重新进入 DFU，再进行下一类写入。最终在 K2「设置 → 6 主题屏开关」开启自定义表盘。[厂商说明](https://www.witrn.com/?p=2615)
+
+「恢复资源备份」选择本应用备份目录的 `manifest.json`，核对类型、摘要及设备信息后，先备份当前状态再恢复完整扇区。不接受任意地址，也不把开发模拟备份恢复到真实设备。`Resource Backups` 目录内包含 `sectors.bin`、`manifest.json`，以及读取操作生成的 `layout.pic` 或图片资源原始数据；图片原始数据是含标记的 RGB565 结构，并非 BMP。
+
+## 本地构建
+
+需要 Xcode 命令行工具、支持目标架构的 Python 3.9 和依赖安装环境。目前构建脚本使用 Python 3.9；Universal 2 构建还要求 Python 解释器及标准库扩展包含两个架构。当前机器的 Xcode 内置 Python 满足这一点，其他机器应先检查自己的解释器。
+
+```sh
+python3.9 -m venv .venv-app
+.venv-app/bin/python -m pip install -r requirements-app.txt
+./script/build_and_run.sh --build-only
+```
+
+脚本会为项目专用 `.venv-app` 合并同版本 HIDAPI 的 arm64 / x86_64 扩展；它不修改系统 Python 或 CLI 的 `.venv`。Universal 2 的双架构导入验证在 Apple Silicon 上需要 Rosetta。依赖未缓存时需要网络。单架构构建可以设置 `K2_APP_ARCH=arm64` 或 `x86_64`，并使用匹配架构的 Python 环境。
+
+直接运行 `./script/build_and_run.sh` 会构建后启动 `.app`，Codex 的 Run 操作指向同一入口。应用仍在运行时，脚本请求正常退出；若有任务阻止退出则停止构建，不强制杀进程。`--build-only` 供已关闭应用时使用。应用使用 ad-hoc 本地签名，不需要 Apple Developer Program，尚未使用 Developer ID 签名或公证；通过下载渠道分发时仍可能触发 Gatekeeper。
+
+```sh
+.venv-app/bin/python -m unittest discover -s tests -v
+CLANG_MODULE_CACHE_PATH="$PWD/build/ModuleCache" \
+SWIFT_MODULE_CACHE_PATH="$PWD/build/ModuleCache" \
+swift test --package-path macos --disable-sandbox \
+  --scratch-path "$PWD/build/swift-tests" --cache-path "$PWD/build/swift-cache" --manifest-cache local
+.venv-app/bin/python script/validate_app.py 'dist/K2 Updater.app'
+```
+
+`validate_app.py` 校验签名和所有 Mach-O 的双架构，复制应用到临时目录后，在清洁环境下验证两种架构的内置后台、HID 加载及完整模拟流程；不擦写 USB 设备。
+
+内存模拟器和故障注入保留在开发验证中，不出现在正式窗口里。开发模拟数据保存在 `Offline Demo/`，备份清单标记 `simulation_only: true`。
+
+## 验证范围
+
+- 46 项 Python 回归、13 项 Swift 核心测试通过，包含文件往返、保留数据、图片方向／RGB565／BMP、备份落盘失败、双遍不一致、断连、错误 ACK、读回失败与恢复。
+- 初版开发界面曾实际验证完整模拟升级、校验失败、备份 Finder 入口、升级中关闭/⌘Q 拦截和只读取消。0.2.1 已移除这些模拟入口，保留实际备份、升级及关闭保护。
+- 0.3.0 正式窗口验证 `.pic` 导入导出逐字节一致、图片裁剪／缩放、坐标和撤销、工程保存／重开，以及无设备时写入禁用；不存在模拟 UI。两个架构的冻结后台均验证固件和三类资源的完整开发模拟读写／恢复流程。
+- 原有 Python 核心曾在一台 K2 上完成 3.4 → 5.8 实机升级；0.3.0 开机图通过真实写入与完整扇区读回校验，用户确认重新上电正常显示。表盘背景和布局资源的实机效果、资源恢复刷写尚未验证。Intel 实机 USB 和 macOS 13 实机仍未验证，最低系统版本是构建目标。
+
+未来公开分发时再补充 Developer ID、公证及真实 Intel / 旧系统验证。应用包内附项目许可、NOTICE 和 Python、HIDAPI、PyInstaller 许可文本。

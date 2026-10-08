@@ -1,6 +1,6 @@
 # WITRN K2 Updater RE
 
-对 WITRN K2 固件容器与 WITRN UP V30 Windows 升级流程的独立分析，以及一个实验性的 Python/HID 升级器实现。项目面向协议研究与设备维护；它不是 WITRN 官方软件，也不隶属于 WITRN。
+对 WITRN K2 固件容器与 WITRN UP V30 Windows 升级流程的独立分析，以及 Python/HID 升级器与原生 macOS 维护工具。项目面向协议研究与设备维护；它不是 WITRN 官方软件，也不隶属于 WITRN。
 
 > **风险提示：** `flash` 会擦除并写入 K2 应用区。设备型号、固件版本或传输条件不兼容时，设备可能无法启动。先阅读协议说明、检查固件并运行离线预演；只有在你能承担风险且已确认设备进入 DFU 时，才考虑实机操作。项目不保证适用于其他硬件、Bootloader 或固件版本。
 
@@ -12,6 +12,14 @@
 - 包含内存模拟传输和故障注入，用于检查主机端流程；模拟结果不证明真实硬件兼容。
 
 分析依据与实现限制见[反向工程报告](reverse/REPORT.md)和[协议说明](docs/protocol.md)。项目曾在一台 K2 上完成一次 3.4 → 5.8 升级并校验完整读回；这不代表其他设备或版本已验证。没有随仓库发布设备备份、实机通信日志或厂商二进制。
+
+## macOS 图形版
+
+提供原生 SwiftUI 图形界面，包含固件升级、表盘编辑和开机图三个入口。支持官方 `.pic` 导入导出、17 项布局元素的坐标／颜色／字号／精度编辑、画布拖动、BMP／PNG／JPEG 裁剪和缩放，以及包含图片的 `.k2project` 工程保存。三类资源分别读取、备份、写入和恢复；擦写前强制执行完整扇区双遍备份，读回校验覆盖整个擦除范围。窗口中不含模拟和测试入口。
+
+K2Picture 格式与资源区依据见[静态分析记录](reverse/K2PICTURE.md)。0.3.0 的开机图写入已在本机 K2 上读回一致，用户确认重新上电正常显示；背景及布局资源的实机效果仍待验证。字体和基线预览为近似，屏幕使用固定示例值。
+
+本地构建生成 `dist/K2 Updater.app`，内置 Python 与 HIDAPI，面向 macOS 13+ 的 Apple Silicon / Intel；使用 ad-hoc 本地签名。构建、使用方法和验证范围见 [macOS 图形版说明](docs/macos-app.md)。
 
 ## 安装
 
@@ -69,6 +77,8 @@ python3 -m unittest discover -s tests -v
 | `reverse/` | 静态分析脚本与分析报告 |
 | `docs/protocol.md` | 帧格式、命令、地址与执行顺序 |
 | `tests/` | 合成样本上的离线回归测试 |
+| `macos/` | SwiftUI 应用、后台消息协议和 Swift 测试 |
+| `script/` | 双架构后台构建、应用打包和签名检查 |
 
 复现静态分析需要用户自行取得 WITRN UP V30 文件，并在本机运行 `reverse/` 下的脚本。原始厂商程序、反编译输出、IDA 数据库和固件均不由本仓库分发。详见 [`reverse/REPORT.md`](reverse/REPORT.md)。
 
