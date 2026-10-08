@@ -35,14 +35,15 @@ class Sample:
 def decode_report(raw, elapsed):
     """Return None for other commands; reject malformed telemetry.
 
-    Existing DFU checksums are reported separately, not assumed to apply to
-    telemetry until a normal-mode hardware capture confirms that behavior.
+    Both checksum sums were confirmed on normal-mode K2 telemetry captures.
     """
     data = normalize_input(raw)
     if not data or data[:2] != b"\xff\x55" or data[8] != 0x1A:
         return None
     if not 45 <= data[9] <= 52:
         raise ValueError("遥测载荷长度无效")
+    if not dfu_checksum_matches(data):
+        raise ValueError("遥测校验不一致")
     # Time counters between Ah/Wh and D+/D- are integers, not floats.
     ah, wh = struct.unpack_from("<2f", data, 14)
     rectime, uptime = struct.unpack_from("<2I", data, 22)
@@ -70,10 +71,17 @@ class Sampler:
         if rate not in (0, 1, 10, 100):
             raise ValueError("采样率应为全部、1、10 或 100 样本/秒")
         self.interval = 1 / rate if rate else 0
-        self.next_time = None
+        self.last_slot = None
 
     def accept(self, time):
-        if self.next_time is None or time + 1e-9 >= self.next_time:
-            self.next_time = time + self.interval
+        if not math.isfinite(time) or time < 0:
+            raise ValueError("采样时间无效")
+        if not self.interval: return True
+        # Fixed elapsed-time buckets avoid shifting the deadline on each packet.
+        # Otherwise a 9.999 ms arrival after a 10 ms sample skips a whole packet,
+        # drifting a 100 Hz source down to roughly 65 Hz in hardware testing.
+        slot = math.floor(time / self.interval + 1e-9)
+        if self.last_slot is None or slot > self.last_slot:
+            self.last_slot = slot
             return True
         return False

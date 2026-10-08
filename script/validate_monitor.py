@@ -60,6 +60,8 @@ def main():
                 time.sleep(max(0, self.started + self.count / 100 - time.monotonic()))
                 data = bytearray(64); data[:2] = b"\xff\x55"; data[8:10] = bytes((0x1a, 52))
                 struct.pack_into("<2f2I6fB", data, 14, 0, 0, self.count // 100, self.count // 100, 2.7, 2.7, 40, 25, 5, 1, 0)
+                data[62] = sum(data[8:62]) % 256
+                data[63] = sum(data[:62]) % 256
                 if time.monotonic() - self.started >= args.seconds: done.set()
                 return bytes(data)
             def close(self): self.closed = True
