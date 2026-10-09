@@ -47,13 +47,22 @@ struct ContentView: View {
                         WorkspaceToolbar(section: section, store: store, picture: picture, emark: emark)
                         Divider()
                         workspace.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(alignment: .topTrailing) {
+                        // Invisible divider that takes up no space but maintains alignment
+                        Divider()
+                            .opacity(0)
+                            .frame(width: connectionExpanded ? 1 : 0)
+                    }
                     // Keep the connection component at the same identity on every page.
                     // Hiding changes only its width; no appearance hook owns a session.
-                    Divider().opacity(connectionExpanded ? 1 : 0)
-                    ConnectionSidebar(updater: store, monitor: monitor, picture: picture, section: section)
-                        .frame(width: connectionExpanded ? 260 : 0)
-                        .clipped().allowsHitTesting(connectionExpanded).accessibilityHidden(!connectionExpanded)
+                    if connectionExpanded {
+                        Divider()
+                        ConnectionSidebar(updater: store, monitor: monitor, picture: picture, section: section, isExpanded: $connectionExpanded)
+                            .frame(width: 260)
+                            .clipped()
+                    }
                 }
                 Divider()
                 TaskStatusBar(store: store, monitor: monitor)

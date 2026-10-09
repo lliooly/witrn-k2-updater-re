@@ -6,6 +6,7 @@ struct ConnectionSidebar: View {
     @ObservedObject var monitor: MonitorStore
     @ObservedObject var picture: PictureStore
     let section: ToolSection
+    @Binding var isExpanded: Bool
     // Page navigation deliberately does not change this preparation selection.
     @State private var mode = "normal"
     @State private var writeIntent: ResourceWriteIntent?
@@ -17,13 +18,31 @@ struct ConnectionSidebar: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("设备连接").font(.title3.weight(.semibold))
-                    Label(summary.title, systemImage: summary.symbol)
-                        .foregroundStyle(summary.color).font(.callout.weight(.medium))
-                        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(summary.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("设备连接").font(.title3.weight(.semibold))
+                        Label(summary.title, systemImage: summary.symbol)
+                            .foregroundStyle(summary.color).font(.callout.weight(.medium))
+                            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(summary.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    VStack(spacing: 6) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isExpanded.toggle()
+                            }
+                        } label: {
+                            Image(systemName: isExpanded ? "sidebar.leading" : "sidebar.trailing")
+                                .font(.title3)
+                        }
+                        .buttonStyle(.plain)
+                        .help(isExpanded ? "收起侧栏" : "展开侧栏")
+
+                        Spacer()
+                    }
                 }
+
                 deviceSelection
                 Divider()
                 VStack(alignment: .leading, spacing: 12) {

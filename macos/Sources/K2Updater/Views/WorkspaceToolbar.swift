@@ -11,10 +11,10 @@ struct WorkspaceToolbar: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(section.rawValue)
-                    .font(.title3)
-                    .fontWeight(.medium)
+                    .font(.title2)
+                    .fontWeight(.semibold)
 
                 if editor {
                     Text((isEmark ? emark.projectURL?.lastPathComponent : picture.projectURL?.lastPathComponent) ?? "未命名工程")
@@ -32,7 +32,7 @@ struct WorkspaceToolbar: View {
                     }
                 } else {
                     Text(section == .monitor ? "实时曲线与采集记录" : "检查固件、备份并更新设备")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
