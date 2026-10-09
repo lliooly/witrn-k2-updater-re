@@ -38,22 +38,28 @@ def main():
     licenses.mkdir()
     for license_path in (ROOT / "third_party").glob("*"):
         if license_path.is_file(): shutil.copy2(license_path, licenses / license_path.name)
-    shutil.copy2(Path(sys.base_prefix) / "lib/python3.9/LICENSE.txt", licenses / "Python-LICENSE.txt")
+    try:
+        shutil.copy2(Path(sys.base_prefix) / "lib/python3.9/LICENSE.txt", licenses / "Python-LICENSE.txt")
+    except FileNotFoundError:
+        pass  # Python license not found, skip
     for dependency in ("hidapi", "pyinstaller"):
-        distribution = importlib.metadata.distribution(dependency)
-        for entry in distribution.files or []:
-            if ".dist-info/licenses/" in str(entry):
-                destination = licenses / dependency / Path(entry).name
-                destination.parent.mkdir(exist_ok=True)
-                shutil.copy2(distribution.locate_file(entry), destination)
+        try:
+            distribution = importlib.metadata.distribution(dependency)
+            for entry in distribution.files or []:
+                if ".dist-info/licenses/" in str(entry):
+                    destination = licenses / dependency / Path(entry).name
+                    destination.parent.mkdir(exist_ok=True)
+                    shutil.copy2(distribution.locate_file(entry), destination)
+        except importlib.metadata.PackageNotFoundError:
+            pass  # Dependency not installed, skip its license
     icon = ROOT / "build/K2Updater.icns"
     if icon.exists():
         shutil.copy2(icon, resources / icon.name)
     info = {
         "CFBundleExecutable": "K2Updater", "CFBundleIdentifier": "dev.witrn.k2updater",
         "CFBundleName": "K2 Updater", "CFBundleDisplayName": "WITRN K2",
-        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.5.1",
-        "CFBundleVersion": "7", "LSMinimumSystemVersion": "13.0",
+        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.6.0",
+        "CFBundleVersion": "8", "LSMinimumSystemVersion": "13.0",
         "NSPrincipalClass": "NSApplication", "NSHighResolutionCapable": True,
         "CFBundleDevelopmentRegion": "zh_CN",
         "UTExportedTypeDeclarations": [{"UTTypeIdentifier": "dev.witrn.k2-firmware",
