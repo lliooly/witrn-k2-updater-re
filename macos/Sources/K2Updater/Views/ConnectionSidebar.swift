@@ -1,14 +1,18 @@
 import SwiftUI
+import K2Core
 
 struct ConnectionSidebar: View {
     @ObservedObject var updater: UpdaterStore
     @ObservedObject var monitor: MonitorStore
+    @ObservedObject var picture: PictureStore
     let section: ToolSection
     // Page navigation deliberately does not change this preparation selection.
     @State private var mode = "normal"
+    @State private var writeIntent: ResourceWriteIntent?
 
     private var summary: ConnectionPresentation { .current(updater: updater, monitor: monitor) }
     private var occupied: Bool { updater.isBusy || monitor.connected }
+    private var isDialOrStartup: Bool { section == .dial || section == .startup }
 
     var body: some View {
         ScrollView {
@@ -31,6 +35,13 @@ struct ConnectionSidebar: View {
                     if monitor.connected || mode == "normal" { normalControls }
                     else { dfuControls }
                 }
+
+                // 设备操作（仅表盘和开机图页面）
+                if isDialOrStartup {
+                    Divider()
+                    deviceOperations
+                }
+
                 Divider()
                 VStack(alignment: .leading, spacing: 10) {
                     Text("设备信息").font(.callout.weight(.semibold))
@@ -137,5 +148,78 @@ struct ConnectionSidebar: View {
                     : "设备读写需要 DFU。选择 DFU 维护并读取信息；表盘、开机图和 E-Mark 可离线编辑"))
                 .font(.callout).foregroundStyle(.secondary)
         }.padding(12).background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    // 设备操作部分（表盘/开机图）
+    private var deviceOperations: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("设备操作")
+                .font(.callout)
+                .fontWeight(.semibold)
+
+            if section == .dial {
+                resourceButtons(.layout)
+                Divider()
+                resourceButtons(.background)
+            } else if section == .startup {
+                resourceButtons(.startup)
+            }
+
+            if !updater.canUseResources {
+                Text("⚠ 需进入 DFU 模式")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            Text("⚠ " + (section == .startup ? "每次写入后重新进入 DFU" : "每次完成后重新进入 DFU"))
+                .font(.caption)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .alert("\(writeIntent?.restoring == true ? "恢复" : "写入")\(writeIntent?.kind.title ?? "资源")？",
+               isPresented: Binding(get: { writeIntent != nil }, set: { if !$0 { writeIntent = nil } })) {
+            Button("取消", role: .cancel) { writeIntent = nil }
+            Button("确认") {
+                if let intent = writeIntent { updater.writeResource(intent) }
+                writeIntent = nil
+            }
+        } message: {
+            Text("先读取目标资源并备份，再擦除、写入并校验")
+        }
+    }
+
+    private func resourceButtons(_ kind: PictureResource) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(kind.title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Button("读取") {
+                    updater.readResource(kind) { picture.acceptRead($0, kind: $1) }
+                }
+                .disabled(!updater.canUseResources)
+                .font(.caption)
+
+                Button("写入") {
+                    do {
+                        writeIntent = ResourceWriteIntent(
+                            kind: kind,
+                            data: try picture.resourceData(kind),
+                            manifest: nil,
+                            manifestHash: nil
+                        )
+                    }
+                    catch {
+                        picture.error = error.localizedDescription
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!updater.canUseResources ||
+                         (kind == .background && picture.project.background == nil) ||
+                         (kind == .startup && picture.project.startup == nil))
+                .font(.caption)
+            }
+        }
     }
 }

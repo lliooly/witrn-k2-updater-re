@@ -51,7 +51,7 @@ struct ContentView: View {
                     // Keep the connection component at the same identity on every page.
                     // Hiding changes only its width; no appearance hook owns a session.
                     Divider().opacity(connectionExpanded ? 1 : 0)
-                    ConnectionSidebar(updater: store, monitor: monitor, section: section)
+                    ConnectionSidebar(updater: store, monitor: monitor, picture: picture, section: section)
                         .frame(width: connectionExpanded ? 260 : 0)
                         .clipped().allowsHitTesting(connectionExpanded).accessibilityHidden(!connectionExpanded)
                 }

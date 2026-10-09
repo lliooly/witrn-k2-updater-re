@@ -10,14 +10,9 @@ struct PictureView: View {
     @State private var writeIntent: ResourceWriteIntent?
     @State private var dropTarget = false
     var body: some View {
-        VStack(spacing: 0) {
-            deviceControls.padding(.horizontal, 20).padding(.vertical, 12)
-            Divider()
-            ScrollView {
-                Group { if startup { startupEditor } else { dialEditor } }
-                    .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
+        Group { if startup { startupEditor } else { dialEditor } }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
         .disabled(store.isBusy)
         .sheet(item: $picture.imageImport) { ImageCropSheet(item: $0, picture: picture) }
         .alert("\(writeIntent?.restoring == true ? "恢复" : "写入")\(writeIntent?.kind.title ?? "资源")？", isPresented: Binding(get: { writeIntent != nil }, set: { if !$0 { writeIntent = nil } })) {
@@ -31,31 +26,6 @@ struct PictureView: View {
         } message: { Text(picture.error ?? "") }
         .onDrop(of: [.fileURL], isTargeted: $dropTarget, perform: acceptDrop)
         .overlay { if dropTarget { RoundedRectangle(cornerRadius: 8).stroke(.blue, lineWidth: 2).allowsHitTesting(false) } }
-    }
-    private var deviceControls: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("设备操作")
-                .font(.headline)
-
-            if !startup {
-                VStack(alignment: .leading, spacing: 20) {
-                    resourceButtons(.layout)
-                    Divider()
-                    resourceButtons(.background)
-                }
-            } else {
-                resourceButtons(.startup)
-            }
-
-            if !store.canUseResources { ResourceAvailabilityHint(store: store) }
-
-            Text("⚠ " + (startup ? "每次写入后重新进入 DFU，再进行其他操作" : "背景和布局分别写入，每次完成后重新进入 DFU"))
-                .font(.callout)
-                .foregroundStyle(.red)
-        }
-        .padding(18)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
     private var dialEditor: some View {
         ViewThatFits(in: .horizontal) {
@@ -136,35 +106,6 @@ struct PictureView: View {
                 Label("图片操作", systemImage: "ellipsis.circle")
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-    private func resourceButtons(_ kind: PictureResource) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(kind.title)
-                .font(.subheadline)
-                .fontWeight(.medium)
-            HStack(spacing: 10) {
-                Button("读取") {
-                    store.readResource(kind) { picture.acceptRead($0, kind: $1) }
-                }
-                .disabled(!store.canUseResources)
-
-                Button("写入") {
-                    do {
-                        writeIntent = ResourceWriteIntent(
-                            kind: kind,
-                            data: try picture.resourceData(kind),
-                            manifest: nil,
-                            manifestHash: nil
-                        )
-                    }
-                    catch { picture.error = error.localizedDescription }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!store.canUseResources ||
-                         (kind == .background && picture.project.background == nil) ||
-                         (kind == .startup && picture.project.startup == nil))
-            }
-        }
     }
     private func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
         guard !store.isBusy, let provider = providers.first else { return false }
