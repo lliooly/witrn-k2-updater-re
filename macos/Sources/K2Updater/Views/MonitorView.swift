@@ -17,138 +17,195 @@ struct MonitorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
-                    Picker("工作区", selection: $workspace) {
+            VStack(alignment: .leading, spacing: 20) {
+                // 工作区切换 - 极简
+                HStack(spacing: 16) {
+                    Picker("", selection: $workspace) {
                         Text("实时").tag("live")
-                        Text("历史记录").tag("history")
-                    }.pickerStyle(.segmented).frame(width: 220)
+                        Text("历史").tag("history")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
+
                     Spacer()
-                    Button { monitor.open() } label: {
-                        Label("打开", systemImage: "folder").labelStyle(.titleAndIcon)
-                    }.disabled(monitor.fileBusy)
-                    exportMenu
+
+                    HStack(spacing: 8) {
+                        Button("打开") { monitor.open() }
+                            .disabled(monitor.fileBusy)
+                        exportMenu
+                    }
                 }
+
+                // 错误提示 - 简洁
                 if let error = monitor.errorMessage {
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.title3)
-                        Text(error).textSelection(.enabled).font(.callout)
+                    HStack(spacing: 12) {
+                        Text("⚠")
+                            .font(.title3)
+                            .foregroundStyle(.red)
+                        Text(error)
+                            .font(.callout)
+                            .textSelection(.enabled)
                         Spacer()
                         Button("关闭") { monitor.errorMessage = nil }
-                    }.padding(12).background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            .buttonStyle(.borderless)
+                    }
+                    .padding(14)
+                    .background(Color.red.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
+
+                // 文件处理状态
                 if monitor.fileBusy {
                     HStack(spacing: 10) {
                         ProgressView().controlSize(.small)
-                        Text("正在处理记录文件…").font(.callout)
+                        Text("正在处理文件")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                         Spacer()
                         Button("取消") { monitor.cancelFiles() }
                     }
                 }
+
+                // 主内容
                 if workspace == "live" {
                     readings
                     MonitorRecordingControls(monitor: monitor)
                 } else {
                     historyView
                 }
+
+                // 当前文件
                 if let path = monitor.displayedPath {
-                    HStack(spacing: 8) {
-                        Image(systemName: "doc.text").foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
                         Text(URL(fileURLWithPath: path).lastPathComponent)
-                            .lineLimit(1).truncationMode(.middle).font(.callout)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                         Spacer()
-                        Button { monitor.reveal() } label: {
-                            Label("定位", systemImage: "arrow.right.circle").labelStyle(.iconOnly)
-                        }
-                    }.foregroundStyle(.secondary)
+                        Button("定位") { monitor.reveal() }
+                            .font(.caption)
+                            .buttonStyle(.borderless)
+                    }
                 }
+
+                Divider()
+
                 chartControls
                 charts
                 statistics
-            }.padding(20)
+            }
+            .padding(24)
         }
-        .onChange(of: monitor.selectedRange) { selected in if selected { statisticsExpanded = true } }
+        .onChange(of: monitor.selectedRange) { selected in
+            if selected { statisticsExpanded = true }
+        }
     }
 
     private var readings: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 20) {
-                reading("电压", monitor.latest?.voltage, "V", color: .blue)
-                reading("电流", monitor.latest?.current, "A", color: .orange)
-                reading("功率", monitor.latest?.power, "W", color: .green)
-            }.opacity(monitor.state?.stale == true ? 0.4 : 1)
-            DisclosureGroup("更多实时读数", isExpanded: $extraReadings) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 24) {
+        VStack(alignment: .leading, spacing: 20) {
+            // 主读数 - 极简设计，无多余颜色
+            HStack(spacing: 0) {
+                reading("电压", monitor.latest?.voltage, "V")
+                Divider().frame(height: 60).padding(.horizontal, 24)
+                reading("电流", monitor.latest?.current, "A")
+                Divider().frame(height: 60).padding(.horizontal, 24)
+                reading("功率", monitor.latest?.power, "W")
+            }
+            .opacity(monitor.state?.stale == true ? 0.35 : 1)
+            .padding(.vertical, 8)
+
+            // 扩展信息
+            if extraReadings {
+                Divider()
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 32) {
                         detailReading("内部温度", MonitorFormat.number(monitor.latest?.tempIn), "°C")
                         detailReading("外部温度", MonitorFormat.number(monitor.latest?.tempOut), "°C")
+                        Spacer()
                     }
-                    HStack(spacing: 24) {
+                    HStack(spacing: 32) {
                         detailReading("D+", MonitorFormat.number(monitor.latest?.dp), "V")
                         detailReading("D−", MonitorFormat.number(monitor.latest?.dn), "V")
+                        detailReading("累计", "\(MonitorFormat.number(monitor.latest?.ah)) Ah", "· \(MonitorFormat.number(monitor.latest?.wh)) Wh")
+                        Spacer()
                     }
-                    HStack(spacing: 24) {
-                        detailReading("累计容量", MonitorFormat.number(monitor.latest?.ah), "Ah")
-                        detailReading("累计能量", MonitorFormat.number(monitor.latest?.wh), "Wh")
+                    HStack(spacing: 32) {
+                        detailReading("记录组", monitor.latest?.group.map(String.init) ?? "—", "")
+                        detailReading("设备记录", deviceTime(monitor.latest?.recordSeconds), "")
+                        detailReading("接收", "\(MonitorFormat.number(monitor.state?.receiveRate, digits: 1))/s", "· \(monitor.state?.recordCount ?? 0) 样本")
+                        Spacer()
                     }
-                    Divider()
-                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                        GridRow {
-                            Text("记录组").foregroundStyle(.secondary)
-                            Text(monitor.latest?.group.map(String.init) ?? "—")
-                        }
-                        GridRow {
-                            Text("设备记录").foregroundStyle(.secondary)
-                            Text(deviceTime(monitor.latest?.recordSeconds))
-                        }
-                        GridRow {
-                            Text("开机时长").foregroundStyle(.secondary)
-                            Text(deviceTime(monitor.latest?.uptime))
-                        }
-                        GridRow {
-                            Text("接收速率").foregroundStyle(.secondary)
-                            Text("\(MonitorFormat.number(monitor.state?.receiveRate, digits: 1))/s")
-                        }
-                        GridRow {
-                            Text("已记录").foregroundStyle(.secondary)
-                            Text("\(monitor.state?.recordCount ?? 0)")
-                        }
-                    }.font(.callout.monospacedDigit())
                     if let invalid = monitor.state?.invalid, invalid > 0 {
-                        HStack {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                            Text("已忽略 \(invalid) 个无效遥测包")
-                        }.font(.callout).foregroundStyle(.orange).padding(.top, 4)
+                        Text("⚠ 已忽略 \(invalid) 个无效遥测包")
+                            .font(.callout).foregroundStyle(.secondary)
                     }
-                }.padding(.top, 8)
-            }.font(.callout).foregroundStyle(.secondary)
-        }.padding(16).background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+                }.font(.callout.monospacedDigit())
+            }
+
+            // 折叠按钮
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    extraReadings.toggle()
+                }
+            } label: {
+                HStack {
+                    Text(extraReadings ? "收起详细信息" : "显示详细信息")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: extraReadings ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(20)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
-    private func deviceTime(_ seconds: Int?) -> String { seconds.map { MonitorFormat.elapsed(Double($0)) } ?? "—" }
-    private func reading(_ title: String, _ value: Double?, _ unit: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.callout).foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(MonitorFormat.number(value)).font(.system(size: 36, weight: .semibold, design: .rounded)).monospacedDigit()
-                Text(unit).font(.title3).foregroundStyle(.secondary)
-            }.foregroundStyle(color)
-        }.frame(maxWidth: .infinity, alignment: .leading)
+
+    private func deviceTime(_ seconds: Int?) -> String {
+        seconds.map { MonitorFormat.elapsed(Double($0)) } ?? "—"
     }
-    private func detailReading(_ title: String, _ value: String, _ unit: String) -> some View {
-        HStack(spacing: 6) {
-            Text(title).foregroundStyle(.secondary)
-            Text("\(value) \(unit)").monospacedDigit()
-        }.font(.callout).frame(maxWidth: .infinity, alignment: .leading)
+
+    private func reading(_ title: String, _ value: Double?, _ unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fontWeight(.medium)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(MonitorFormat.number(value))
+                    .font(.system(size: 42, weight: .regular, design: .rounded))
+                    .monospacedDigit()
+                Text(unit)
+                    .font(.title3)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func detailReading(_ title: String, _ value: String, _ suffix: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value + (suffix.isEmpty ? "" : " " + suffix))
+                .font(.callout.monospacedDigit())
+        }
     }
 
     private var exportMenu: some View {
-        Menu {
-            Menu("全部记录") { exportItems(selection: false) }.disabled(monitor.displayedPath == nil || monitor.fileBusy)
-            Menu("选中区间") { exportItems(selection: true) }.disabled(!monitor.selectedRange || monitor.fileBusy)
+        Menu("导出") {
+            Menu("全部记录") { exportItems(selection: false) }
+                .disabled(monitor.displayedPath == nil || monitor.fileBusy)
+            Menu("选中区间") { exportItems(selection: true) }
+                .disabled(!monitor.selectedRange || monitor.fileBusy)
             Divider()
-            Button("保存曲线 PNG…") { saveChart() }.disabled(monitor.points.isEmpty)
-        } label: {
-            Label("导出", systemImage: "square.and.arrow.up")
+            Button("保存曲线 PNG") { saveChart() }
+                .disabled(monitor.points.isEmpty)
         }
     }
     @ViewBuilder private func exportItems(selection: Bool) -> some View {
@@ -158,55 +215,81 @@ struct MonitorView: View {
     }
 
     private var chartControls: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                timeControls
-                Spacer()
-                navigationControls
-            }
-            Divider()
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)], alignment: .leading, spacing: 8) {
-                ForEach(MonitorChannel.allCases) { channel in
-                    Toggle(channel.title, isOn: Binding(get: { monitor.channels.contains(channel) }, set: { enabled in
-                        if enabled { monitor.channels.insert(channel) } else { monitor.channels.remove(channel) }
-                    })).toggleStyle(.checkbox)
+        VStack(alignment: .leading, spacing: 16) {
+            // 时间控制
+            HStack(spacing: 16) {
+                Toggle("跟随", isOn: $monitor.follow)
+                    .onChange(of: monitor.follow) { value in
+                        if value {
+                            monitor.selectedRange = false
+                            monitor.refreshChart(stats: false)
+                        }
+                    }
+                    .disabled(!monitor.connected)
+                    .frame(width: 90)
+
+                Picker("窗口", selection: $monitor.windowSeconds) {
+                    Text("1 分钟").tag(60.0)
+                    Text("5 分钟").tag(300.0)
+                    Text("30 分钟").tag(1800.0)
                 }
-            }.font(.callout)
+                .frame(width: 120)
+
+                Spacer()
+
+                // 导航控制
+                HStack(spacing: 4) {
+                    Button("全程") {
+                        monitor.refreshChart(stats: true, overview: true)
+                    }
+                    .help("全程概览")
+
+                    Divider().frame(height: 16).padding(.horizontal, 4)
+
+                    Button("﹣") { monitor.zoom(2) }.help("缩小")
+                    Button("﹢") { monitor.zoom(0.5) }.help("放大")
+
+                    Divider().frame(height: 16).padding(.horizontal, 4)
+
+                    Button("←") { monitor.move(-1) }.help("前移")
+                    Button("→") { monitor.move(1) }.help("后移")
+
+                    if monitor.querying {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.leading, 4)
+                    }
+                }
+                .font(.title3)
+                .buttonStyle(.borderless)
+                .disabled(monitor.displayedPath == nil || monitor.querying)
+            }
+            .disabled(monitor.displayedPath == nil || monitor.querying)
+
+            Divider()
+
+            // 通道选择 - 紧凑布局
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 85), spacing: 16)],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                ForEach(MonitorChannel.allCases) { channel in
+                    Toggle(channel.title, isOn: Binding(
+                        get: { monitor.channels.contains(channel) },
+                        set: { enabled in
+                            if enabled {
+                                monitor.channels.insert(channel)
+                            } else {
+                                monitor.channels.remove(channel)
+                            }
+                        }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .font(.callout)
+                }
+            }
         }
-    }
-    private var timeControls: some View {
-        HStack(spacing: 12) {
-            Toggle(isOn: $monitor.follow) {
-                Label("跟随最新", systemImage: "arrow.right.to.line")
-            }.onChange(of: monitor.follow) { value in
-                if value { monitor.selectedRange = false; monitor.refreshChart(stats: false) }
-            }.disabled(!monitor.connected)
-            Picker("窗口", selection: $monitor.windowSeconds) {
-                Text("1 分钟").tag(60.0); Text("5 分钟").tag(300.0); Text("30 分钟").tag(1800.0)
-            }.frame(width: 140)
-        }.disabled(monitor.displayedPath == nil || monitor.querying)
-    }
-    private var navigationControls: some View {
-        HStack(spacing: 8) {
-            Button { monitor.refreshChart(stats: true, overview: true) } label: {
-                Label("全程", systemImage: "arrow.up.left.and.arrow.down.right")
-            }.help("全程概览")
-            Divider().frame(height: 16)
-            Button { monitor.zoom(0.5) } label: {
-                Image(systemName: "plus.magnifyingglass")
-            }.help("放大")
-            Button { monitor.zoom(2) } label: {
-                Image(systemName: "minus.magnifyingglass")
-            }.help("缩小")
-            Divider().frame(height: 16)
-            Button { monitor.move(-1) } label: {
-                Image(systemName: "chevron.left")
-            }.help("向前移动")
-            Button { monitor.move(1) } label: {
-                Image(systemName: "chevron.right")
-            }.help("向后移动")
-            if monitor.querying { ProgressView().controlSize(.small) }
-        }.disabled(monitor.displayedPath == nil || monitor.querying)
     }
     @ViewBuilder private var charts: some View {
         if !monitor.points.isEmpty {

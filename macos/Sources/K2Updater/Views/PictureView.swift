@@ -33,31 +33,29 @@ struct PictureView: View {
         .overlay { if dropTarget { RoundedRectangle(cornerRadius: 8).stroke(.blue, lineWidth: 2).allowsHitTesting(false) } }
     }
     private var deviceControls: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("设备操作").font(.headline)
+        VStack(alignment: .leading, spacing: 20) {
+            Text("设备操作")
+                .font(.headline)
+
             if !startup {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 24) {
-                        resourceButtons(.layout)
-                        Divider()
-                        resourceButtons(.background)
-                    }
-                    VStack(alignment: .leading, spacing: 16) {
-                        resourceButtons(.layout)
-                        Divider()
-                        resourceButtons(.background)
-                    }
+                VStack(alignment: .leading, spacing: 20) {
+                    resourceButtons(.layout)
+                    Divider()
+                    resourceButtons(.background)
                 }
             } else {
                 resourceButtons(.startup)
             }
+
             if !store.canUseResources { ResourceAvailabilityHint(store: store) }
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
-                Text(startup ? "每次写入后重新进入 DFU，再进行其他操作" : "背景和布局分别写入，每次完成后重新进入 DFU。最后在 K2 设置 → 6 主题屏开关中开启表盘")
-                    .font(.callout).foregroundStyle(.orange)
-            }
-        }.padding(14).background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+
+            Text("⚠ " + (startup ? "每次写入后重新进入 DFU，再进行其他操作" : "背景和布局分别写入，每次完成后重新进入 DFU"))
+                .font(.callout)
+                .foregroundStyle(.red)
+        }
+        .padding(18)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
     private var dialEditor: some View {
         ViewThatFits(in: .horizontal) {
@@ -140,18 +138,31 @@ struct PictureView: View {
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private func resourceButtons(_ kind: PictureResource) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(kind.title).font(.title3.weight(.semibold))
+        VStack(alignment: .leading, spacing: 12) {
+            Text(kind.title)
+                .font(.subheadline)
+                .fontWeight(.medium)
             HStack(spacing: 10) {
-                Button { store.readResource(kind) { picture.acceptRead($0, kind: $1) } } label: {
-                    Label("读取", systemImage: "arrow.down.circle.fill")
-                }.disabled(!store.canUseResources)
-                Button {
-                    do { writeIntent = ResourceWriteIntent(kind: kind, data: try picture.resourceData(kind), manifest: nil, manifestHash: nil) }
+                Button("读取") {
+                    store.readResource(kind) { picture.acceptRead($0, kind: $1) }
+                }
+                .disabled(!store.canUseResources)
+
+                Button("写入") {
+                    do {
+                        writeIntent = ResourceWriteIntent(
+                            kind: kind,
+                            data: try picture.resourceData(kind),
+                            manifest: nil,
+                            manifestHash: nil
+                        )
+                    }
                     catch { picture.error = error.localizedDescription }
-                } label: {
-                    Label("写入", systemImage: "arrow.up.circle.fill")
-                }.buttonStyle(.borderedProminent).disabled(!store.canUseResources || (kind == .background && picture.project.background == nil) || (kind == .startup && picture.project.startup == nil))
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!store.canUseResources ||
+                         (kind == .background && picture.project.background == nil) ||
+                         (kind == .startup && picture.project.startup == nil))
             }
         }
     }
