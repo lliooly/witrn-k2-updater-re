@@ -2,6 +2,23 @@ import XCTest
 @testable import K2Core
 
 final class MonitorTests: XCTestCase {
+    func testBinaryCursorLookupMatchesLinearLookupIncludingDuplicatesAndTies() throws {
+        let times = [0.0, 1, 1, 2, 4, 8]
+        let points = try times.enumerated().map { index, time in
+            try WireCodec.decoder.decode(MonitorSample.self, from: Data("""
+            {"time":\(time),"voltage":\(index),"current":-2,"power":10,"signed_power":-10,"segment":0}
+            """.utf8))
+        }
+        for time in stride(from: -1.0, through: 10, by: 0.125) {
+            let expected = points.min { abs($0.time - time) < abs($1.time - time) }
+            let actual = MonitorSample.nearest(in: points, to: time)
+            XCTAssertEqual(actual?.voltage, expected?.voltage, "cursor at \(time)")
+        }
+        XCTAssertNil(MonitorSample.nearest(in: [], to: 0))
+        XCTAssertNil(MonitorSample.nearest(in: points, to: .nan))
+        XCTAssertNil(MonitorSample.nearest(in: points, to: .infinity))
+    }
+
     func testSignedSampleAndMissingTemperatureDecode() throws {
         let data = Data(#"{"time":1.5,"voltage":5,"current":-2,"power":10,"signed_power":-10,"segment":3}"#.utf8)
         let sample = try WireCodec.decoder.decode(MonitorSample.self, from: data)

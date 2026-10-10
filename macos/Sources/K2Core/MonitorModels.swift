@@ -17,6 +17,26 @@ public struct MonitorSample: Decodable, Identifiable, Sendable {
     public let group: Int?
     public let segment: Int
     public var id: String { "\(segment):\(time)" }
+    /// Query points are ordered by time. Preserve the old nearest-point/tie
+    /// behavior without scanning the whole plotted series on every mouse move.
+    public static func nearest(in points: [MonitorSample], to time: Double) -> MonitorSample? {
+        guard time.isFinite, !points.isEmpty else { return nil }
+        func lowerBound(_ target: Double) -> Int {
+            var low = 0, high = points.count
+            while low < high {
+                let middle = low + (high - low) / 2
+                if points[middle].time < target { low = middle + 1 }
+                else { high = middle }
+            }
+            return low
+        }
+        let next = lowerBound(time)
+        let index: Int
+        if next == 0 { index = 0 }
+        else if next == points.count { index = next - 1 }
+        else { index = time - points[next - 1].time <= points[next].time - time ? next - 1 : next }
+        return points[lowerBound(points[index].time)]
+    }
     public func value(_ channel: MonitorChannel) -> Double? {
         switch channel {
         case .voltage: return voltage
