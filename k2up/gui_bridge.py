@@ -19,7 +19,7 @@ from .picture import resource_for, sha
 from .picture_device import load_backup, transfer_resource
 
 RESOURCE_OPERATIONS = {"resource-read", "resource-write", "resource-restore"}
-OPERATIONS = {"devices", "inspect", "demo-firmware", "probe", "backup", "upgrade"} | RESOURCE_OPERATIONS
+OPERATIONS = {"devices", "inspect", "firmware-extract", "demo-firmware", "probe", "backup", "upgrade"} | RESOURCE_OPERATIONS
 MONITOR_OPERATIONS = {"monitor", "monitor-query", "monitor-import", "monitor-export", "monitor-list"}
 OPERATIONS |= MONITOR_OPERATIONS
 DEMO_FAULTS = {None, "verify", "disconnect", "batch-nack"}
@@ -121,6 +121,10 @@ def dispatch(request, events, input_stream=None):
         firmware = Firmware.load(request["firmware_path"])
         return {"firmware": firmware.summary(), "firmware_path": str(Path(request["firmware_path"]).resolve()),
                 "demo_firmware": is_demo_firmware(firmware)}
+    if operation == "firmware-extract":
+        from .official_firmware import import_archive
+        events.progress("validate")
+        return import_archive(request["firmware_path"], request["data_directory"], request["firmware_version"])
     if operation in MONITOR_OPERATIONS:
         from .monitor import run_monitor
         from .recording import summary

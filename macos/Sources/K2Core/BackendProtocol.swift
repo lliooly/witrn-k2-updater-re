@@ -38,6 +38,7 @@ public enum JSONValue: Codable, Equatable, Sendable {
 
 public enum BackendOperation: String, Codable, Sendable {
     case devices, inspect, probe, backup, upgrade
+    case firmwareExtract = "firmware-extract"
     case resourceRead = "resource-read", resourceWrite = "resource-write", resourceRestore = "resource-restore"
     case monitor, monitorQuery = "monitor-query", monitorImport = "monitor-import", monitorExport = "monitor-export", monitorList = "monitor-list"
     public var canCancel: Bool { !isWrite }
@@ -51,6 +52,7 @@ public struct BackendRequest: Encodable, Sendable {
     public var dataDirectory: String
     public var firmwarePath: String?
     public var firmwareSha256: String?
+    public var firmwareVersion: String?
     public var devicePathHex: String?
     public var deviceSerial: String?
     public var deviceInfoSha256: String?
