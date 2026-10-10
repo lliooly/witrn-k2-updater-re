@@ -11,7 +11,7 @@ struct FirmwareCard: View {
                 Text("固件")
                     .font(.headline)
                 Spacer()
-                Button("选择固件") { FirmwarePicker.choose(store) }
+                Button("选择本地固件") { FirmwarePicker.choose(store) }
                     .disabled(store.isBusy)
             }
 

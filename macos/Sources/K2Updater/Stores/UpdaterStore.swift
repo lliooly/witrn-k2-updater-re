@@ -106,6 +106,11 @@ final class UpdaterStore: ObservableObject {
     }
     func backup() { run(.backup) }
     func inspect(_ url: URL) { guard !isBusy else { return }; firmware = nil; firmwareURL = url; run(.inspect) }
+    func importOfficialFirmware(_ archive: URL, version: String) {
+        guard !isBusy else { return }
+        firmware = nil; firmwareURL = archive
+        run(.firmwareExtract, firmwareVersion: version)
+    }
     func upgrade() { run(.upgrade, confirmed: true) }
     func readResource(_ kind: PictureResource, receive: @escaping (URL, PictureResource) -> Void) {
         guard canUseResources else { return }
@@ -145,13 +150,14 @@ final class UpdaterStore: ObservableObject {
     func cancel() { guard canCancel else { return }; status = "正在停止只读操作…"; backend.cancelReadOnly() }
 
     private func run(_ action: BackendOperation, confirmed: Bool = false, resource: PictureResource? = nil,
-                     payload: URL? = nil, digest: String? = nil) {
+                     payload: URL? = nil, digest: String? = nil, firmwareVersion: String? = nil) {
         guard !isBusy else { return }
-        guard !monitorConnected || action == .devices || action == .inspect else {
+        guard !monitorConnected || action == .devices || action == .inspect || action == .firmwareExtract else {
             errorMessage = "请先在曲线页面断开采集，再进行设备维护操作"; return
         }
         var request = BackendRequest(operation: action, dataDirectory: dataDirectory.path)
         request.firmwarePath = firmwareURL?.path
+        request.firmwareVersion = firmwareVersion
         request.firmwareSha256 = firmware?.fileSha256
         request.devicePathHex = selectedDevice?.pathHex
         request.deviceSerial = selectedDevice?.serialNumber
@@ -161,7 +167,7 @@ final class UpdaterStore: ObservableObject {
         request.resourceKind = resource?.rawValue
         if action == .resourceRestore { request.restoreManifestPath = payload?.path; request.restoreManifestSha256 = digest }
         else { request.resourcePath = payload?.path; request.resourceSha256 = digest }
-        if action != .devices && action != .inspect { tracePath = nil; backupPath = nil }
+        if action != .devices && action != .inspect && action != .firmwareExtract { tracePath = nil; backupPath = nil }
         operation = action; isBusy = true; receivedError = false; pendingResult = nil
         errorMessage = nil; successful = false; stage = "preflight"; current = 0; total = 0
         status = "正在处理"
@@ -204,7 +210,7 @@ final class UpdaterStore: ObservableObject {
             case .devices:
                 applyDeviceList(try value["devices"]?.decoded([DeviceInfo].self) ?? [])
                 status = devices.isEmpty ? "未发现 K2，请检查数据线及 CC1/HID 口" : "已发现 \(devices.count) 个接口"
-            case .inspect:
+            case .inspect, .firmwareExtract:
                 firmware = try value["firmware"]?.decoded(FirmwareInfo.self)
                 if let path = value["firmware_path"]?.string { firmwareURL = URL(fileURLWithPath: path) }
                 isDemoFirmware = value["demo_firmware"]?.bool == true

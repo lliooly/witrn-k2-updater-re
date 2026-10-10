@@ -10,6 +10,7 @@ struct FirmwareView: View {
     }
     @State private var confirmUpgrade = false
     @State private var showIllustration = false
+    @StateObject private var official = OfficialFirmwareStore()
     private let titles = ["进入 DFU", "选择固件", "备份并升级", "完成"]
     private let manualURL = URL(string: "https://github.com/JohnScotttt/WITRN-K2-Quick-Reference-Manual#7-固件类")!
 
@@ -54,7 +55,7 @@ struct FirmwareView: View {
 
             HStack {
                 if step > 0 && step < 3 {
-                    Button("上一步") { step -= 1 }.disabled(store.isBusy)
+                    Button("上一步") { step -= 1 }.disabled(store.isBusy || official.downloading)
                 }
                 Spacer()
                 if step == 0 {
@@ -62,11 +63,14 @@ struct FirmwareView: View {
                         .buttonStyle(.borderedProminent).disabled(!store.canUseResources)
                 } else if step == 1 {
                     Button("下一步：确认升级") { store.advanceFirmwareWizard(to: 2) }
-                        .buttonStyle(.borderedProminent).disabled(!store.canUpgrade)
+                        .buttonStyle(.borderedProminent).disabled(!store.canUpgrade || official.downloading)
                 } else if step == 3 {
                     Button("开始新的升级") { step = 0 }.buttonStyle(.borderedProminent).disabled(store.isBusy)
                 }
             }
+        }
+        .task(id: step) {
+            if step == 1 { await official.checkIfNeeded() }
         }
         .onChange(of: store.isBusy) { busy in
             guard !busy else { return }
@@ -158,8 +162,9 @@ struct FirmwareView: View {
 
     private var firmwareSelection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("选择或拖入本地 .k2 文件，校验通过后才能继续。")
-            FirmwareCard(store: store)
+            Text("使用官网最新固件，或选择本地 .k2 文件。校验通过后才能继续。")
+            officialFirmwareCard
+            FirmwareCard(store: store).disabled(official.downloading)
             versionComparison
             if store.isBusy { ProgressView(store.status).controlSize(.small) }
             if store.isDemoFirmware {
@@ -167,6 +172,48 @@ struct FirmwareView: View {
                     .foregroundStyle(.orange)
             }
         }
+    }
+
+    private var officialFirmwareCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("官网固件").font(.headline)
+                Spacer()
+                Link("打开官网", destination: OfficialFirmwareService.pageURL).font(.caption)
+            }
+            if official.checking {
+                ProgressView("正在检查官网最新版本…").controlSize(.small)
+            } else if let release = official.release {
+                HStack(spacing: 12) {
+                    Text("当前 \(store.identity?.currentVersion ?? "未知")")
+                    Image(systemName: "arrow.right").foregroundStyle(.secondary)
+                    Text("官网 V\(release.version)").fontWeight(.semibold)
+                }
+                if store.identity?.currentVersion == release.version {
+                    Text("设备已是官网当前发布版本。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if official.downloading {
+                    ProgressView("正在下载官网固件…").controlSize(.small)
+                } else {
+                    Button("下载并使用 V\(release.version)") {
+                        Task {
+                            await official.download(to: store.dataDirectory) { archive, version in
+                                store.importOfficialFirmware(archive, version: version)
+                            }
+                        }
+                    }.buttonStyle(.borderedProminent).disabled(store.isBusy)
+                }
+            }
+            if let error = official.errorMessage {
+                Text(error).font(.callout).foregroundStyle(.orange)
+            }
+            Button("重新检查") { Task { await official.check() } }
+                .disabled(official.checking || official.downloading || store.isBusy)
+                .font(.caption)
+        }
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var versionComparison: some View {
