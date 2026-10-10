@@ -27,7 +27,11 @@ export SWIFT_MODULE_CACHE_PATH="$K2_ROOT/build/ModuleCache"
 export PYINSTALLER_CONFIG_DIR="$K2_ROOT/build/pyinstaller-cache"
 "$K2_PYTHON" script/prepare_backend.py --arch "$K2_ARCH"
 
-K2_SWIFT_ARGS=(--package-path macos --disable-sandbox --cache-path "$K2_ROOT/build/swift-cache" --scratch-path "$K2_ROOT/build/swift" --manifest-cache local -c release)
+K2_MACOS_SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+# Some SwiftPM toolchains stamp the deployment target as the SDK version.
+# Preserve macOS 13 support while opting into the actual SDK's UI behavior.
+K2_SWIFT_ARGS=(--package-path macos --disable-sandbox --cache-path "$K2_ROOT/build/swift-cache" --scratch-path "$K2_ROOT/build/swift" --manifest-cache local -c release
+    -Xlinker -platform_version -Xlinker macos -Xlinker 13.0 -Xlinker "$K2_MACOS_SDK_VERSION")
 if [[ "$K2_ARCH" == "universal2" ]]; then
     K2_SWIFT_ARGS+=(--arch arm64 --arch x86_64)
 else
@@ -37,7 +41,7 @@ swift build "${K2_SWIFT_ARGS[@]}"
 K2_BIN_DIR="$(swift build "${K2_SWIFT_ARGS[@]}" --show-bin-path)"
 swift script/generate_icon.swift "$K2_ROOT/build/K2Updater.iconset"
 /usr/bin/iconutil -c icns "$K2_ROOT/build/K2Updater.iconset" -o "$K2_ROOT/build/K2Updater.icns"
-"$K2_PYTHON" script/package_app.py --binary "$K2_BIN_DIR/K2Updater" --arch "$K2_ARCH"
+"$K2_PYTHON" script/package_app.py --binary "$K2_BIN_DIR/K2Updater" --arch "$K2_ARCH" --sdk-version "$K2_MACOS_SDK_VERSION"
 
 case "$K2_MODE" in
     --build-only) ;;

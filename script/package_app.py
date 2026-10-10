@@ -4,6 +4,7 @@ import argparse
 import importlib.metadata
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -15,12 +16,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--arch", default="universal2")
+    parser.add_argument("--sdk-version", help="Expected SDK version recorded in every Mach-O slice")
     parser.add_argument("--output", type=Path, default=ROOT / "dist/K2 Updater.app",
                         help="Generated .app path within dist (allows staging beside a running version)")
     args = parser.parse_args()
     app = args.output.resolve()
     if not app.is_relative_to(ROOT / "dist") or app.suffix != ".app":
         parser.error("--output 必须是 dist 内的 .app 构建路径")
+    if args.sdk_version:
+        load_commands = subprocess.check_output(["/usr/bin/otool", "-l", str(args.binary)], text=True)
+        versions = re.findall(r"^\s+sdk\s+(\S+)", load_commands, re.MULTILINE)
+        if not versions or any(version != args.sdk_version for version in versions):
+            parser.error(f"构建 SDK 标记不匹配：预期 {args.sdk_version}，实际 {versions}。请使用 build_and_run.sh 重新链接应用")
     # This is our generated build output only, never user-selected paths.
     if app.exists():
         shutil.rmtree(app)
@@ -29,6 +36,8 @@ def main():
     macos.mkdir(parents=True)
     resources.mkdir()
     shutil.copy2(args.binary, macos / "K2Updater")
+    for bundle in args.binary.parent.glob("K2Updater_K2Updater.bundle"):
+        shutil.copytree(bundle, resources / bundle.name)
     helper = ROOT / "build/backend-dist/k2-backend"
     shutil.copytree(helper, resources / "Backend", symlinks=True)
     for name in ("LICENSE", "NOTICE.md"):
@@ -58,8 +67,8 @@ def main():
     info = {
         "CFBundleExecutable": "K2Updater", "CFBundleIdentifier": "dev.witrn.k2updater",
         "CFBundleName": "K2 Updater", "CFBundleDisplayName": "WITRN K2",
-        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.6.0",
-        "CFBundleVersion": "8", "LSMinimumSystemVersion": "13.0",
+        "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.7.1",
+        "CFBundleVersion": "10", "LSMinimumSystemVersion": "13.0",
         "NSPrincipalClass": "NSApplication", "NSHighResolutionCapable": True,
         "CFBundleDevelopmentRegion": "zh_CN",
         "UTExportedTypeDeclarations": [{"UTTypeIdentifier": "dev.witrn.k2-firmware",
