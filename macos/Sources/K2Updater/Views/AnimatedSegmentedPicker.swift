@@ -6,7 +6,6 @@ struct AnimatedSegmentedPicker<Selection: Hashable>: View {
     @Binding var selection: Selection
     let options: [(value: Selection, title: String)]
 
-    @Namespace private var highlight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
 
@@ -23,21 +22,25 @@ struct AnimatedSegmentedPicker<Selection: Hashable>: View {
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background {
-                            if selection == option.value {
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.accentColor)
-                                    .matchedGeometryEffect(id: "selection", in: highlight)
-                            }
-                        }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selection == option.value ? .isSelected : [])
             }
         }
+        .background(alignment: .leading) {
+            GeometryReader { geometry in
+                let segmentWidth = geometry.size.width / CGFloat(max(1, options.count))
+                let index = options.firstIndex(where: { $0.value == selection }) ?? 0
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.accentColor)
+                    .frame(width: segmentWidth, height: geometry.size.height)
+                    .offset(x: segmentWidth * CGFloat(index))
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: selection)
+            }
+            .allowsHitTesting(false)
+        }
         .background(.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: selection)
         .opacity(isEnabled ? 1 : 0.5)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
