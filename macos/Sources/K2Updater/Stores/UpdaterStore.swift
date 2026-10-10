@@ -28,12 +28,14 @@ final class UpdaterStore: ObservableObject {
     @Published var stage = "preflight"
     @Published var current = 0
     @Published var total = 0
-    @Published var status = "连接 K2 后刷新设备"
+    @Published var status = "等待 K2 连接"
     @Published var errorMessage: String?
     @Published var successful = false
     @Published var backupPath: String?
     @Published var tracePath: String?
     private let backend = BackendClient()
+    private let deviceChecker = BackendClient()
+    private var checkingDevices = false
     private var pendingResult: JSONValue?
     private var receivedError = false
     private var resourceReadResult: ((URL, PictureResource) -> Void)?
@@ -61,6 +63,39 @@ final class UpdaterStore: ObservableObject {
     func deviceChanged() { identity = nil }
     func refreshDevices() { run(.devices) }
     func probe() { run(.probe) }
+    /// Enumerate without resetting task results or touching a device interface.
+    func checkDevicePresence() {
+        guard !isBusy, !checkingDevices else { return }
+        checkingDevices = true
+        var listedDevices: [DeviceInfo]?
+        do {
+            try deviceChecker.start(BackendRequest(operation: .devices, dataDirectory: dataDirectory.path),
+                onEvent: { event in
+                    if event.event == "result" {
+                        listedDevices = try? event.value?["devices"]?.decoded([DeviceInfo].self)
+                    }
+                }, onFinish: { [weak self] code, _ in
+                    guard let self else { return }
+                    self.checkingDevices = false
+                    guard !self.isBusy else { return }
+                    guard code == 0, let devices = listedDevices else { self.identity = nil; return }
+                    self.applyDeviceList(devices)
+                })
+        } catch { checkingDevices = false }
+    }
+
+    func applyDeviceList(_ discovered: [DeviceInfo]) {
+        let previous = selectedDevice
+        if devices != discovered { devices = discovered }
+        if selectedDevice == nil {
+            let path = !monitorConnected && discovered.count == 1 ? discovered[0].pathHex : ""
+            if selectedPath != path { selectedPath = path }
+        }
+        if selectedDevice != previous || selectedDevice == nil {
+            if identity != nil { identity = nil }
+            if dfuConfirmed { dfuConfirmed = false }
+        }
+    }
     func backup() { run(.backup) }
     func inspect(_ url: URL) { guard !isBusy else { return }; firmware = nil; firmwareURL = url; run(.inspect) }
     func upgrade() { run(.upgrade, confirmed: true) }
@@ -114,6 +149,7 @@ final class UpdaterStore: ObservableObject {
         request.deviceSerial = selectedDevice?.serialNumber
         request.deviceInfoSha256 = identity?.infoSha256
         request.dfuConfirmed = dfuConfirmed; request.confirmed = confirmed
+        if action == .probe { identity = nil }
         request.resourceKind = resource?.rawValue
         if action == .resourceRestore { request.restoreManifestPath = payload?.path; request.restoreManifestSha256 = digest }
         else { request.resourcePath = payload?.path; request.resourceSha256 = digest }
@@ -158,8 +194,7 @@ final class UpdaterStore: ObservableObject {
         do {
             switch operation {
             case .devices:
-                devices = try value["devices"]?.decoded([DeviceInfo].self) ?? []
-                if !devices.contains(where: { $0.pathHex == selectedPath }) { selectedPath = devices.first?.pathHex ?? ""; identity = nil }
+                applyDeviceList(try value["devices"]?.decoded([DeviceInfo].self) ?? [])
                 status = devices.isEmpty ? "未发现 K2，请检查数据线及 CC1/HID 口" : "已发现 \(devices.count) 个接口"
             case .inspect:
                 firmware = try value["firmware"]?.decoded(FirmwareInfo.self)

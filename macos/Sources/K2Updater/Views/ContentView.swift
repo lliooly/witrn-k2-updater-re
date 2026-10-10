@@ -69,7 +69,10 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 1100, minHeight: 720)
-        .task { store.refreshDevices() }
+        .task { store.checkDevicePresence() }
+        .onReceive(Timer.publish(every: 0.75, on: .main, in: .common).autoconnect()) { _ in
+            store.checkDevicePresence()
+        }
         .toolbar {
             ToolbarItemGroup {
                 Menu {
