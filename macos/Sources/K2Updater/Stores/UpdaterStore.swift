@@ -31,11 +31,13 @@ final class UpdaterStore: ObservableObject {
     @Published var status = "等待 K2 连接"
     @Published var errorMessage: String?
     @Published var successful = false
+    @Published var firmwareWizardStep = 0
     @Published var backupPath: String?
     @Published var tracePath: String?
     private let backend = BackendClient()
     private let deviceChecker = BackendClient()
     private var checkingDevices = false
+    private var pendingFirmwareStep: Int?
     private var pendingResult: JSONValue?
     private var receivedError = false
     private var resourceReadResult: ((URL, PictureResource) -> Void)?
@@ -63,6 +65,12 @@ final class UpdaterStore: ObservableObject {
     func deviceChanged() { identity = nil }
     func refreshDevices() { run(.devices) }
     func probe() { run(.probe) }
+    func advanceFirmwareWizard(to step: Int) {
+        guard (1...2).contains(step), canUseResources, step != 2 || canUpgrade else { return }
+        pendingFirmwareStep = step
+        run(.probe)
+    }
+
     /// Enumerate without resetting task results or touching a device interface.
     func checkDevicePresence() {
         guard !isBusy, !checkingDevices else { return }
@@ -183,7 +191,7 @@ final class UpdaterStore: ObservableObject {
     }
 
     private func finish(_ code: Int32, _ error: Error?) {
-        defer { isBusy = false; operation = nil; resourceReadResult = nil }
+        defer { isBusy = false; operation = nil; resourceReadResult = nil; pendingFirmwareStep = nil }
         if let error { errorMessage = error.localizedDescription; receivedError = true }
         guard code == 0, !receivedError, let value = pendingResult else {
             if code != 130 && errorMessage == nil { errorMessage = "后台未正常完成（退出码 \(code)）" }
@@ -205,6 +213,9 @@ final class UpdaterStore: ObservableObject {
             case .probe:
                 identity = try value["identity"]?.decoded(IdentityInfo.self)
                 status = "设备读取完成 · 当前版本 \(identity?.currentVersion ?? "未知")"
+                if identity?.confirmedK2 == true, let step = pendingFirmwareStep {
+                    firmwareWizardStep = step
+                }
             case .backup:
                 identity = try value["identity"]?.decoded(IdentityInfo.self)
                 backupPath = value["backup"]?["directory"]?.string
@@ -213,6 +224,7 @@ final class UpdaterStore: ObservableObject {
                 backupPath = value["backup"]?["directory"]?.string
                 status = "固件 \(firmware?.version ?? "") 已写入并校验，请重新上电确认"
                 successful = true
+                firmwareWizardStep = 3
                 identity = nil; dfuConfirmed = false
             case .resourceRead:
                 backupPath = value["backup"]?["directory"]?.string
