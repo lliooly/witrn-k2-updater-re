@@ -13,7 +13,18 @@ struct WindowGuard: NSViewRepresentable {
             guard let window = view.window, window.delegate !== context.coordinator else { return }
             context.coordinator.originalDelegate = window.delegate
             window.delegate = context.coordinator
+            WindowGuard.hideStockToolbar(window)
         }
+    }
+
+    /// Hides the stock window toolbar.
+    ///
+    /// SwiftUI fills it with the system sidebar toggle, whose own strip stays
+    /// empty once the navigation sidebar carries its own control. The app adds
+    /// no toolbar items of its own, so the toolbar is hidden outright.
+    @MainActor
+    static func hideStockToolbar(_ window: NSWindow) {
+        window.toolbar?.isVisible = false
     }
 
     @MainActor

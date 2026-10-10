@@ -18,6 +18,9 @@ struct K2UpdaterApp: App {
         }
         .defaultSize(width: 1280, height: 880)
         .windowResizability(.contentMinSize)
+        // The page title is drawn by the app's own glass top bar, so the window
+        // title bar is removed to avoid showing the same title twice.
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .newItem) {
