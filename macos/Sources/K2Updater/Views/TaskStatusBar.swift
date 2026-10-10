@@ -30,7 +30,7 @@ struct TaskStatusBar: View {
                     Label(summary.title, systemImage: summary.symbol).foregroundStyle(summary.color)
                     Text(monitor.message).foregroundStyle(.secondary).lineLimit(1)
                     Spacer()
-                    Text("\(monitor.state?.recordCount ?? 0) 样本").monospacedDigit()
+                    MonitorCaptureProgress(telemetry: monitor.telemetry, showsElapsed: false)
                 } else {
                     Label(store.status, systemImage: store.successful ? "checkmark.circle" : "info.circle")
                         .foregroundStyle(store.successful ? Color.green : Color.secondary).lineLimit(1)

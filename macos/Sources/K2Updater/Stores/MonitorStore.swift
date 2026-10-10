@@ -4,17 +4,52 @@ import Foundation
 import K2Core
 import UniformTypeIdentifiers
 
+/// High-frequency display values have their own observation scope. Updating a
+/// reading must not invalidate the window, toolbars or the chart data.
+@MainActor
+final class MonitorTelemetry: ObservableObject {
+    @Published fileprivate(set) var state: MonitorStatus?
+    @Published fileprivate(set) var latest: MonitorSample?
+}
+
+@MainActor
+final class MonitorQueryActivity: ObservableObject {
+    @Published fileprivate(set) var isRunning = false
+}
+
 @MainActor
 final class MonitorStore: ObservableObject {
     @Published private(set) var connected = false
     @Published private(set) var disconnecting = false
-    @Published private(set) var state: MonitorStatus?
+    let telemetry = MonitorTelemetry()
+    private(set) var state: MonitorStatus? {
+        get { telemetry.state }
+        set {
+            // Connection and recording controls still update immediately on
+            // meaningful state transitions, including stale telemetry.
+            if state?.recording != newValue?.recording || state?.paused != newValue?.paused ||
+                state?.stale != newValue?.stale {
+                objectWillChange.send()
+            }
+            telemetry.state = newValue
+        }
+    }
     @Published private(set) var query: MonitorQuery?
     @Published private(set) var records: [MonitorRecord] = []
     @Published private(set) var fileBusy = false
-    @Published private(set) var querying = false
+    let queryActivity = MonitorQueryActivity()
+    private(set) var querying: Bool {
+        get { queryActivity.isRunning }
+        set { queryActivity.isRunning = newValue }
+    }
     @Published private(set) var controlPending = false
-    @Published private(set) var latest: MonitorSample?
+    private(set) var latest: MonitorSample? {
+        get { telemetry.latest }
+        set {
+            if (latest == nil) != (newValue == nil) { objectWillChange.send() }
+            telemetry.latest = newValue
+        }
+    }
     @Published var message = "正常模式连接 K2，从 CC1/HID 口接入；不按减号键"
     @Published var errorMessage: String?
     @Published var rate = 10
@@ -28,8 +63,12 @@ final class MonitorStore: ObservableObject {
     @Published var threshold: Double = 0.05
     @Published var duration: Double = 30
     @Published var channels: Set<MonitorChannel> = [.voltage, .current, .power]
-    private(set) var recordPath: String?
-    private var previewPath: String?
+    private(set) var recordPath: String? {
+        willSet { if recordPath != newValue { objectWillChange.send() } }
+    }
+    private var previewPath: String? {
+        willSet { if previewPath != newValue { objectWillChange.send() } }
+    }
     private let capture = BackendClient()
     private let files = BackendClient()
     private let reader = BackendClient()
@@ -69,16 +108,7 @@ final class MonitorStore: ObservableObject {
                 if event.event == "monitor", let value = event.value {
                     do {
                         let update = try value.decoded(MonitorStatus.self)
-                        if let path = update.previewPath { self.previewPath = path }
-                        if let path = update.recordPath { self.recordPath = path }
-                        self.state = update
-                        if let sample = update.latest { self.latest = sample }
-                        if update.controlAck != nil { self.controlPending = false }
-                        if let notice = update.notice {
-                            self.message = notice
-                            if update.controlAck != nil { self.errorMessage = notice }
-                        }
-                        else { self.message = update.stale == true ? "遥测已过期，正在检查连接" : (update.recording ? (update.paused ? "记录已暂停，实时预览继续" : "正在记录") : "实时预览") }
+                        self.applyStatus(update)
                     } catch { self.errorMessage = error.localizedDescription; self.disconnect() }
                 } else if event.event == "error" { self.errorMessage = event.message }
                 else if event.event == "result", let value = event.value {
@@ -99,6 +129,22 @@ final class MonitorStore: ObservableObject {
         } catch {
             connected = false; updater.monitorConnected = false; errorMessage = error.localizedDescription
         }
+    }
+
+    /// Shared event path, kept separate so notification scope can be verified.
+    func applyStatus(_ update: MonitorStatus) {
+        if let path = update.previewPath { previewPath = path }
+        if let path = update.recordPath { recordPath = path }
+        state = update
+        if let sample = update.latest { latest = sample }
+        if update.controlAck != nil, controlPending { controlPending = false }
+        let nextMessage: String
+        if let notice = update.notice {
+            nextMessage = notice
+            if update.controlAck != nil { errorMessage = notice }
+        }
+        else { nextMessage = update.stale == true ? "遥测已过期，正在检查连接" : (update.recording ? (update.paused ? "记录已暂停，实时预览继续" : "正在记录") : "实时预览") }
+        if message != nextMessage { message = nextMessage }
     }
 
     func disconnect() {
@@ -149,23 +195,31 @@ final class MonitorStore: ObservableObject {
         }
         let generation = queryGeneration
         querying = true
-        var result: MonitorQuery?
+        var result: JSONValue?
         var failure: String?
         do {
             try reader.start(req, onEvent: { event in
-                if event.event == "result", let value = event.value { result = try? value.decoded(MonitorQuery.self) }
+                if event.event == "result" { result = event.value }
                 if event.event == "error" { failure = event.message }
             }, onFinish: { [weak self] code, error in
-                guard let self else { return }
-                self.querying = false
-                let pending = self.pendingQuery; self.pendingQuery = nil
-                defer { if let pending { self.refreshChart(stats: pending.0, overview: pending.1) } }
-                guard generation == self.queryGeneration, path == self.displayedPath else { return }
-                if let result {
-                    self.query = result
-                    if overview { self.follow = false; self.selectedRange = false; self.rangeStart = result.start ?? 0; self.rangeEnd = result.end ?? 1 }
-                    else if self.follow && !self.selectedRange { self.rangeStart = result.rangeStart ?? 0; self.rangeEnd = result.rangeEnd ?? 1 }
-                } else if code != 130, stats { self.errorMessage = error?.localizedDescription ?? failure ?? "记录查询失败" }
+                let payload = result, failureMessage = failure
+                Task { [weak self] in
+                    // The JSON value already arrived off the pipe. Its typed
+                    // conversion can be large and does not belong on the UI actor.
+                    let decoded = await Task.detached(priority: .userInitiated) {
+                        try? payload?.decoded(MonitorQuery.self)
+                    }.value
+                    guard let self else { return }
+                    self.querying = false
+                    let pending = self.pendingQuery; self.pendingQuery = nil
+                    defer { if let pending { self.refreshChart(stats: pending.0, overview: pending.1) } }
+                    guard generation == self.queryGeneration, path == self.displayedPath else { return }
+                    if let decoded {
+                        self.query = decoded
+                        if overview { self.follow = false; self.selectedRange = false; self.rangeStart = decoded.start ?? 0; self.rangeEnd = decoded.end ?? 1 }
+                        else if self.follow && !self.selectedRange { self.rangeStart = decoded.rangeStart ?? 0; self.rangeEnd = decoded.rangeEnd ?? 1 }
+                    } else if code != 130, stats { self.errorMessage = error?.localizedDescription ?? failureMessage ?? "记录查询失败" }
+                }
             })
         } catch { querying = false; errorMessage = error.localizedDescription }
     }
