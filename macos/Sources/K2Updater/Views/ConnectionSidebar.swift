@@ -22,10 +22,9 @@ struct ConnectionSidebar: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 12) {
                     Text("连接用途").font(.callout.weight(.semibold))
-                    Picker("连接用途", selection: $mode) {
-                        Text("正常采集").tag("normal")
-                        Text("DFU 维护").tag("dfu")
-                    }.pickerStyle(.segmented).labelsHidden().disabled(occupied)
+                    AnimatedSegmentedPicker(title: "连接用途", selection: $mode,
+                                            options: [("normal", "正常采集"), ("dfu", "DFU 维护")])
+                        .disabled(occupied)
                     if monitor.connected || mode == "normal" { normalControls }
                     else { dfuControls }
                 }

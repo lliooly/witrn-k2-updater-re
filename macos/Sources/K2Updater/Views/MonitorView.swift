@@ -93,12 +93,8 @@ struct MonitorWorkspace: View {
 
     private func commandRow(compact: Bool) -> some View {
         HStack(spacing: 10) {
-            Picker("", selection: $workspace) {
-                Text("实时").tag("live")
-                Text("历史").tag("history")
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            AnimatedSegmentedPicker(title: "采集视图", selection: $workspace,
+                                    options: [("live", "实时"), ("history", "历史")])
             .frame(width: compact ? 128 : 146)
 
             if workspace == "live" { liveCommands(compact: compact) } else { historyCommands(compact: compact) }
