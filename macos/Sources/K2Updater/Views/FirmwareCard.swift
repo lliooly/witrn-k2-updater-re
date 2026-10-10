@@ -7,13 +7,12 @@ struct FirmwareCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("固件")
-                    .font(.headline)
-                Spacer()
-                Button("选择本地固件") { FirmwarePicker.choose(store) }
-                    .disabled(store.isBusy)
+            VStack(spacing: 8) {
+                Image(systemName: "arrow.up.doc").font(.title2).foregroundStyle(.secondary)
+                Text("点击选择或拖入 .k2 固件").font(.callout)
+                Text("会先检查型号、长度和校验值").font(.caption).foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, minHeight: 110)
 
             if let firmware = store.firmware {
                 VStack(alignment: .leading, spacing: 10) {
@@ -38,18 +37,7 @@ struct FirmwareCard: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Text(store.firmwareURL?.lastPathComponent ?? "")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("选择或拖入 .k2 固件")
-                        .font(.callout)
-                    Text("会先检查型号、长度和校验值")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+
                 }
             }
         }
@@ -59,8 +47,15 @@ struct FirmwareCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(targeted ? Color.accentColor : Color.clear, lineWidth: 2)
+                .strokeBorder(targeted ? Color.accentColor : Color.secondary.opacity(0.5),
+                              style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
         )
+        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .onTapGesture { guard !store.isBusy else { return }; FirmwarePicker.choose(store) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("点击选择或拖入 .k2 固件")
+        .accessibilityAction { FirmwarePicker.choose(store) }
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $targeted) { providers in
             guard !store.isBusy, let provider = providers.first else { return false }
             _ = provider.loadObject(ofClass: URL.self) { url, _ in

@@ -42,11 +42,16 @@ final class UISnapshotHarness: XCTestCase {
                 updater.firmwareWizardStep = step
                 render(FirmwareView(store: updater, showConnection: {}).padding(24),
                        size: CGSize(width: 740, height: 720),
-                       name: "firmware-\(scheme)-\(step)", scheme: scheme, dir: dir)
+                       name: "firmware-\(scheme)-\(step)", scheme: scheme, dir: dir,
+                       settleDelay: step == 3 ? 1 : 0.5)
             }
             updater.firmwareWizardStep = 2
             updater.isBusy = true
             updater.status = "读回校验"
+            updater.stage = "verify"
+            updater.firmwareProgressPhase = .upgrade
+            updater.tracePath = ProcessInfo.processInfo.environment["K2_FIRMWARE_SNAPSHOT_TRACE"]
+            updater.firmwareTaskTracePath = updater.tracePath
             updater.total = 100
             updater.current = 60
             render(FirmwareView(store: updater, showConnection: {}).padding(24),
@@ -155,7 +160,7 @@ final class UISnapshotHarness: XCTestCase {
     @MainActor
     private func render(_ view: some View, size: CGSize, name: String,
                         scheme: ColorScheme, dir: String, scrollOffset: CGFloat? = nil,
-                        nativeTitlebar: Bool = false) {
+                        nativeTitlebar: Bool = false, settleDelay: TimeInterval = 0.5) {
         // Without an explicit opaque backdrop the capture keeps alpha, and the
         // default-coloured text becomes invisible against a white preview.
         let root = view
@@ -177,7 +182,7 @@ final class UISnapshotHarness: XCTestCase {
         defer { if composite { window.orderOut(nil) } }
         window.layoutIfNeeded()
         hosting.layoutSubtreeIfNeeded()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        RunLoop.main.run(until: Date().addingTimeInterval(settleDelay))
         hosting.layoutSubtreeIfNeeded()
         if let scrollOffset {
             func descendants(_ view: NSView) -> [NSScrollView] {

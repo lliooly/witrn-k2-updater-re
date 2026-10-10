@@ -25,13 +25,19 @@ final class UpdaterStore: ObservableObject {
     @Published var isBusy = false
     @Published var monitorConnected = false
     @Published var operation: BackendOperation?
+    @Published var firmwareProgressPhase = FirmwareProgressPhase.firstBackup
     @Published var stage = "preflight"
     @Published var current = 0
     @Published var total = 0
     @Published var status = "等待 K2 连接"
     @Published var errorMessage: String?
     @Published var successful = false
-    @Published var firmwareWizardStep = 0
+    @Published var firmwareWizardStep = 0 {
+        didSet {
+            if oldValue == 3 && firmwareWizardStep == 0 { firmwareTaskTracePath = nil }
+        }
+    }
+    @Published var firmwareTaskTracePath: String?
     @Published var backupPath: String?
     @Published var tracePath: String?
     private let backend = BackendClient()
@@ -54,17 +60,31 @@ final class UpdaterStore: ObservableObject {
     }
 
     var selectedDevice: DeviceInfo? { devices.first { $0.pathHex == selectedPath } }
-    var canProbe: Bool { !isBusy && !monitorConnected && selectedDevice != nil && dfuConfirmed }
+    var canProbe: Bool { !isBusy && !monitorConnected && selectedDevice != nil }
     var canUpgrade: Bool {
-        canProbe && identity?.confirmedK2 == true && firmware != nil && !isDemoFirmware
+        canProbe && dfuConfirmed && identity?.confirmedK2 == true && firmware != nil && !isDemoFirmware
     }
     var canCancel: Bool { isBusy && operation?.canCancel == true }
-    var canUseResources: Bool { canProbe && identity?.confirmedK2 == true }
+    var canUseResources: Bool { canProbe && dfuConfirmed && identity?.confirmedK2 == true }
     var progress: Double { total > 0 ? min(1, Double(current) / Double(total)) : 0 }
 
-    func deviceChanged() { identity = nil }
+    var firmwarePhaseProgress: Double { firmwareProgressPhase.progress(stage: stage, fraction: progress) }
+
+    func deviceChanged() { identity = nil; dfuConfirmed = false }
     func refreshDevices() { run(.devices) }
-    func probe() { run(.probe) }
+    func probe() {
+        guard !isBusy else { return }
+        guard !monitorConnected else {
+            errorMessage = "请先在连接栏断开采集，再连接 DFU 设备。"
+            return
+        }
+        guard selectedDevice != nil else {
+            identity = nil; dfuConfirmed = false
+            errorMessage = "未发现或未选择设备，请检查数据线和 CC1/HID 接口。"
+            return
+        }
+        run(.probe)
+    }
     func advanceFirmwareWizard(to step: Int) {
         guard (1...2).contains(step), canUseResources, step != 2 || canUpgrade else { return }
         pendingFirmwareStep = step
@@ -163,13 +183,15 @@ final class UpdaterStore: ObservableObject {
         request.deviceSerial = selectedDevice?.serialNumber
         request.deviceInfoSha256 = identity?.infoSha256
         request.dfuConfirmed = dfuConfirmed; request.confirmed = confirmed
-        if action == .probe { identity = nil }
+        if action == .probe { identity = nil; dfuConfirmed = false }
         request.resourceKind = resource?.rawValue
         if action == .resourceRestore { request.restoreManifestPath = payload?.path; request.restoreManifestSha256 = digest }
         else { request.resourcePath = payload?.path; request.resourceSha256 = digest }
         if action != .devices && action != .inspect && action != .firmwareExtract { tracePath = nil; backupPath = nil }
+        if action == .backup || action == .upgrade { firmwareTaskTracePath = nil }
         operation = action; isBusy = true; receivedError = false; pendingResult = nil
         errorMessage = nil; successful = false; stage = "preflight"; current = 0; total = 0
+        firmwareProgressPhase = .firstBackup
         status = "正在处理"
         do {
             try backend.start(request, onEvent: { [weak self] in self?.receive($0) },
@@ -181,10 +203,19 @@ final class UpdaterStore: ObservableObject {
         switch event.event {
         case "progress":
             stage = event.stage ?? stage; current = event.current ?? 0; total = event.total ?? 0
+            if stage == "backup-read" { firmwareProgressPhase = .firstBackup }
+            else if ["backup-verify", "backup-recovery", "backup-complete"].contains(stage) {
+                firmwareProgressPhase = .checkBackup
+            } else if ["log-reset", "erase", "write", "verify", "commit", "exit", "complete"].contains(stage) {
+                firmwareProgressPhase = .upgrade
+            }
             status = StageTitle.text(stage)
         case "paths":
             if let backup = event.backup { backupPath = backup }
-            if let trace = event.trace { tracePath = trace }
+            if let trace = event.trace {
+                tracePath = trace
+                if operation == .backup || operation == .upgrade { firmwareTaskTracePath = trace }
+            }
         case "identity":
             if let value = event.identity { identity = try? value.decoded(IdentityInfo.self) }
         case "result": pendingResult = event.value
@@ -202,7 +233,10 @@ final class UpdaterStore: ObservableObject {
         guard code == 0, !receivedError, let value = pendingResult else {
             if code != 130 && errorMessage == nil { errorMessage = "后台未正常完成（退出码 \(code)）" }
             if code != 130 { status = "操作已停止" }
-            if operation?.isWrite == true { identity = nil; dfuConfirmed = false }
+            if operation?.isWrite == true || operation == .probe { identity = nil; dfuConfirmed = false }
+            if operation == .probe, code != 130 {
+                errorMessage = "连接设备失败，请确认屏幕显示 K2 DFU，并检查数据线和 CC1/HID 接口。\n" + (errorMessage ?? "")
+            }
             return
         }
         do {
@@ -218,6 +252,8 @@ final class UpdaterStore: ObservableObject {
                 if isDemoFirmware { errorMessage = "这是合成固件，不能写入设备" }
             case .probe:
                 identity = try value["identity"]?.decoded(IdentityInfo.self)
+                dfuConfirmed = identity?.confirmedK2 == true
+                if !dfuConfirmed { errorMessage = "设备未通过 K2 DFU 校验，请检查设备型号、接口和 DFU 状态。" }
                 status = "设备读取完成 · 当前版本 \(identity?.currentVersion ?? "未知")"
                 if identity?.confirmedK2 == true, let step = pendingFirmwareStep {
                     firmwareWizardStep = step

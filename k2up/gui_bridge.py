@@ -67,8 +67,8 @@ def validate_request(request):
     if not isinstance(delay, int) or not 0 <= delay <= 100:
         raise ValueError("演示延迟无效")
     if request["operation"] in ({"probe", "backup", "upgrade"} | RESOURCE_OPERATIONS) and not request.get("simulation"):
-        if request.get("dfu_confirmed") is not True:
-            raise ValueError("请先按减号键进入 DFU，并勾选已进入 DFU")
+        if request["operation"] != "probe" and request.get("dfu_confirmed") is not True:
+            raise ValueError("请先连接设备并通过 DFU 检测")
         if not request.get("device_path_hex"):
             raise ValueError("请先选择一个设备接口")
     if request["operation"] == "upgrade" and request.get("confirmed") is not True:

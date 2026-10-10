@@ -101,7 +101,7 @@ struct ContentView: View {
             }
             .animation(LayoutMetrics.connectionSidebarAnimation, value: connectionExpanded)
             Divider()
-            TaskStatusBar(store: store, monitor: monitor)
+            TaskStatusBar(store: store, monitor: monitor, firmwareOnly: section == .firmware)
         }
     }
 

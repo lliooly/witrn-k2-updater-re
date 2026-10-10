@@ -7,7 +7,8 @@ from unittest.mock import patch
 import uuid
 
 from k2up.demo import demo_firmware, is_demo_firmware
-from k2up.gui_bridge import main
+from k2up.gui_bridge import main, validate_request
+from k2up.demo import DemoTransport, demo_device
 
 
 class GuiBridgeTests(unittest.TestCase):
@@ -30,6 +31,22 @@ class GuiBridgeTests(unittest.TestCase):
         return self.request(root, operation="upgrade", firmware_path=str(path),
                             firmware_sha256=firmware.summary()["file_sha256"],
                             device_info_sha256=identity["info_sha256"], confirmed=True, **fields)
+
+    def test_probe_automatically_checks_dfu_without_checkbox(self):
+        with tempfile.TemporaryDirectory() as root:
+            request = self.request(root, simulation=False, dfu_confirmed=False, device_path_hex="00")
+            with patch("k2up.gui_bridge.selected_device", return_value=demo_device()), \
+                 patch("k2up.gui_bridge.HidTransport", return_value=DemoTransport()):
+                code, events = self.execute(request)
+            self.assertEqual(code, 0)
+            self.assertTrue(events[-1]["value"]["identity"]["confirmed_k2"])
+
+    def test_backup_and_write_still_require_successful_dfu_confirmation(self):
+        for operation in ("backup", "upgrade", "resource-write", "resource-restore"):
+            request = self.request("/tmp", operation=operation, simulation=False,
+                                   dfu_confirmed=False, device_path_hex="00", confirmed=True)
+            with self.subTest(operation=operation), self.assertRaisesRegex(ValueError, "DFU 检测"):
+                validate_request(request)
 
     def test_full_demo_backs_up_before_flash_without_hid(self):
         with tempfile.TemporaryDirectory() as root, patch("k2up.transport._hid", side_effect=AssertionError("USB accessed")):

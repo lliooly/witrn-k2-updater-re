@@ -59,6 +59,7 @@ struct ConnectionSidebar: View {
                 }
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonBorderShape(.roundedRectangle)
         .frame(width: LayoutMetrics.connectionSidebarWidth)
         .frame(maxHeight: .infinity)
         .modifier(SystemGlassSurface())
@@ -109,7 +110,7 @@ struct ConnectionSidebar: View {
                 Text("断开时会提交当前记录。切换页面不会中断采集").font(.caption).foregroundStyle(.secondary)
             } else {
                 Button { monitor.connect() } label: {
-                    Label("连接并预览", systemImage: "cable.connector")
+                    Label("连接设备", systemImage: "cable.connector")
                 }.buttonStyle(.borderedProminent).disabled(updater.isBusy || updater.selectedDevice == nil)
             }
         }
@@ -121,15 +122,16 @@ struct ConnectionSidebar: View {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.caption)
                 Text("按住减号键，从 CC1/HID 口连接，进入 DFU").font(.caption).foregroundStyle(.orange)
             }
-            Toggle("已按住减号键连接，进入 DFU", isOn: $updater.dfuConfirmed)
-                .font(.callout).disabled(occupied)
             Button { updater.probe() } label: {
-                Label("读取设备信息", systemImage: "info.circle")
+                Label("连接设备", systemImage: "cable.connector")
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!updater.canProbe)
+            .disabled(occupied)
             .frame(maxWidth: .infinity, alignment: .leading)
-            Text("读取成功后才允许设备备份和写入").font(.caption).foregroundStyle(.secondary)
+            if let error = updater.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.red).textSelection(.enabled)
+            }
         }
     }
 

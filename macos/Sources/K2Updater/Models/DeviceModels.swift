@@ -43,3 +43,31 @@ enum StageTitle {
          "resource-exit": "结束资源写入", "resource-complete": "资源写入完成"][stage] ?? stage
     }
 }
+
+
+enum FirmwareProgressPhase: Equatable {
+    case firstBackup, checkBackup, upgrade
+
+    var title: String {
+        switch self {
+        case .firstBackup: return "第一次备份"
+        case .checkBackup: return "检查备份"
+        case .upgrade: return "升级固件"
+        }
+    }
+
+    func progress(stage: String, fraction: Double) -> Double {
+        switch self {
+        case .firstBackup: return stage == "backup-read" ? fraction : 0
+        case .checkBackup: return stage == "backup-verify" ? fraction : 1
+        case .upgrade:
+            switch stage {
+            case "erase": return fraction * 0.1
+            case "write": return 0.1 + fraction * 0.45
+            case "verify": return 0.55 + fraction * 0.45
+            case "commit", "exit", "complete": return 1
+            default: return 0
+            }
+        }
+    }
+}

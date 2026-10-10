@@ -4,9 +4,35 @@ import K2Core
 struct TaskStatusBar: View {
     @ObservedObject var store: UpdaterStore
     @ObservedObject var monitor: MonitorStore
+    var firmwareOnly = false
     @State private var showError = false
 
     var body: some View {
+        Group {
+            if firmwareOnly { firmwareStatus }
+            else { taskStatus }
+        }
+    }
+
+    private var firmwareStatus: some View {
+        HStack(spacing: 10) {
+            if store.errorMessage != nil {
+                Label("操作未完成", systemImage: "exclamationmark.circle").foregroundStyle(.red)
+            } else if store.identity?.confirmedK2 == true && store.dfuConfirmed {
+                Label("连接成功", systemImage: "checkmark.circle").foregroundStyle(.green)
+            } else if store.firmwareWizardStep == 3 && store.successful {
+                Label("升级完成 · 请重新上电", systemImage: "checkmark.circle").foregroundStyle(.green)
+            } else {
+                let summary = ConnectionPresentation.current(updater: store, monitor: monitor)
+                Label(summary.title, systemImage: summary.symbol).foregroundStyle(summary.color)
+            }
+            Spacer()
+            Button("日志") { store.showLog() }.disabled(store.tracePath == nil)
+        }
+        .font(.caption).padding(.horizontal, 16).padding(.vertical, 10)
+    }
+
+    private var taskStatus: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
                 if store.isBusy {
