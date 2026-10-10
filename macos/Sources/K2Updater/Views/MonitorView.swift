@@ -9,477 +9,446 @@ struct MonitorView: View {
     @SceneStorage("monitorWorkspace") private var workspace = "live"
     @SceneStorage("monitorExtraReadings") private var extraReadings = false
     @SceneStorage("monitorStatisticsExpanded") private var statisticsExpanded = false
+
+    var body: some View {
+        MonitorWorkspace(monitor: monitor, updater: updater, showConnection: showConnection,
+                         workspace: $workspace, extraReadings: $extraReadings,
+                         statisticsExpanded: $statisticsExpanded)
+    }
+}
+
+/// The monitor page. Live and history share one arrangement: the command bar, the
+/// voltage/current/power panel, a single line of chart controls and the charts
+/// immediately beneath the panel.
+struct MonitorWorkspace: View {
+    @ObservedObject var monitor: MonitorStore
+    @ObservedObject var updater: UpdaterStore
+    let showConnection: () -> Void
+    @Binding var workspace: String
+    @Binding var extraReadings: Bool
+    @Binding var statisticsExpanded: Bool
+
     @State private var showLocalRecordsCard = false
+    @State private var showRecordingSettings = false
+    @State private var contentWidth: CGFloat = 760
+
     private var interval: ClosedRange<Double>? {
         guard monitor.selectedRange, monitor.rangeStart.isFinite, monitor.rangeEnd.isFinite,
               monitor.rangeEnd >= monitor.rangeStart else { return nil }
         return monitor.rangeStart...monitor.rangeEnd
     }
 
+    private var displayedChannels: [MonitorChannel] {
+        MonitorChannel.allCases.filter { monitor.channels.contains($0) }
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // 工作区切换 + 操作按钮 (单行)
-                HStack(spacing: 16) {
-                    Picker("", selection: $workspace) {
-                        Text("实时").tag("live")
-                        Text("历史").tag("history")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 180)
+            VStack(alignment: .leading, spacing: 16) {
+                commandBar
 
-                    if workspace == "live" {
-                        // Real-time controls on same line
-                        HStack(spacing: 8) {
-                            if monitor.recording {
-                                Button(monitor.paused ? "继续" : "暂停") {
-                                    monitor.pauseResume()
-                                }
-                                .frame(width: 70)
+                if workspace == "history" { localRecordsCard }
 
-                                Button("停止") {
-                                    monitor.stopRecording()
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.red.opacity(0.8))
-                            } else {
-                                Button("开始记录") {
-                                    monitor.startRecording()
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(!monitor.connected)
-                            }
+                if let error = monitor.errorMessage { errorBanner(error) }
+                if monitor.fileBusy { fileBusyBanner }
 
-                            if monitor.connected {
-                                Text("\(monitor.state?.recordCount ?? 0) 样本 · \(MonitorFormat.elapsed(monitor.state?.elapsed ?? 0))")
-                                    .font(.callout.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else {
-                        // History page: Local Records button
-                        Button {
-                            showLocalRecordsCard.toggle()
-                        } label: {
-                            Label("本地记录", systemImage: "folder.fill")
-                        }
-                        .popover(isPresented: $showLocalRecordsCard, arrowEdge: .top) {
-                            localRecordsPopover
-                        }
-                    }
+                MonitorReadings(telemetry: monitor.telemetry, extraReadings: $extraReadings)
 
-                    Spacer()
+                chartCommandBar
 
-                    HStack(spacing: 8) {
-                        Button("打开") { monitor.open() }
-                            .disabled(monitor.fileBusy)
-                        exportMenu
-                    }
-                }
-
-                // 错误提示
-                if let error = monitor.errorMessage {
-                    HStack(spacing: 12) {
-                        Text("⚠")
-                            .font(.title3)
-                            .foregroundStyle(.red)
-                        Text(error)
-                            .font(.callout)
-                            .textSelection(.enabled)
-                        Spacer()
-                        Button("关闭") { monitor.errorMessage = nil }
-                            .buttonStyle(.borderless)
-                    }
-                    .padding(14)
-                    .background(Color.red.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-
-                // 文件处理状态
-                if monitor.fileBusy {
-                    HStack(spacing: 10) {
-                        ProgressView().controlSize(.small)
-                        Text("正在处理文件")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("取消") { monitor.cancelFiles() }
-                    }
-                }
-
-                // 主内容 - Real-time
-                if workspace == "live" {
-                    readings
-                    recordingControls
-                } else {
-                    // History page content
-                    historyHeaderInfo
-                }
-
-                // 当前文件
-                if let path = monitor.displayedPath {
-                    HStack(spacing: 10) {
-                        Text(URL(fileURLWithPath: path).lastPathComponent)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Spacer()
-                        Button("定位") { monitor.reveal() }
-                            .font(.caption)
-                            .buttonStyle(.borderless)
-                    }
-                }
-
-                Divider()
-
-                // 图表控制 (单行布局)
-                consolidatedChartControls
-
-                // 图表显示
                 charts
 
-                // 统计信息
+                if let path = monitor.displayedPath { currentFile(path) }
+
                 statistics
             }
-            .padding(24)
+            .padding(LayoutMetrics.pagePadding)
+            .frame(maxWidth: 1180, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            max(0, min(geometry.size.width, 1180) - 2 * LayoutMetrics.pagePadding)
+        } action: { width in
+            if abs(contentWidth - width) > 1 { contentWidth = width }
         }
         .onChange(of: monitor.selectedRange) { selected in
             if selected { statisticsExpanded = true }
         }
-    }
-
-    // MARK: - Readings Display (Liquid Glass)
-    private var readings: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(spacing: 0) {
-                reading("电压", monitor.latest?.voltage, "V")
-                Divider().frame(height: 60).padding(.horizontal, 24)
-                reading("电流", monitor.latest?.current, "A")
-                Divider().frame(height: 60).padding(.horizontal, 24)
-                reading("功率", monitor.latest?.power, "W")
-            }
-            .opacity(monitor.state?.stale == true ? 0.35 : 1)
-            .padding(.vertical, 8)
-
-            if extraReadings {
-                Divider()
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 32) {
-                        detailReading("内部温度", MonitorFormat.number(monitor.latest?.tempIn), "°C")
-                        detailReading("外部温度", MonitorFormat.number(monitor.latest?.tempOut), "°C")
-                        Spacer()
-                    }
-                    HStack(spacing: 32) {
-                        detailReading("D+", MonitorFormat.number(monitor.latest?.dp), "V")
-                        detailReading("D−", MonitorFormat.number(monitor.latest?.dn), "V")
-                        detailReading("累计", "\(MonitorFormat.number(monitor.latest?.ah)) Ah", "· \(MonitorFormat.number(monitor.latest?.wh)) Wh")
-                        Spacer()
-                    }
-                    HStack(spacing: 32) {
-                        detailReading("记录组", monitor.latest?.group.map(String.init) ?? "—", "")
-                        detailReading("设备记录", deviceTime(monitor.latest?.recordSeconds), "")
-                        detailReading("接收", "\(MonitorFormat.number(monitor.state?.receiveRate, digits: 1))/s", "· \(monitor.state?.recordCount ?? 0) 样本")
-                        Spacer()
-                    }
-                    if let invalid = monitor.state?.invalid, invalid > 0 {
-                        Text("⚠ 已忽略 \(invalid) 个无效遥测包")
-                            .font(.callout).foregroundStyle(.secondary)
-                    }
-                }.font(.callout.monospacedDigit())
-            }
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    extraReadings.toggle()
-                }
-            } label: {
-                HStack {
-                    Text(extraReadings ? "收起详细信息" : "显示详细信息")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: extraReadings ? "chevron.up" : "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .padding(20)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var recordingControls: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Menu("操作") {
-                    Button("定位文件") { monitor.reveal() }
-                        .disabled(monitor.displayedPath == nil)
-                    Button("清除预览") { monitor.clearPreview() }
-                        .disabled(!monitor.connected || monitor.recording || monitor.disconnecting)
-                }
-                Spacer()
-                Menu("记录设置") {
-                    HStack {
-                        Text("采样上限")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 80, alignment: .leading)
-                        Picker("", selection: $monitor.rate) {
-                            Text("1/s").tag(1)
-                            Text("10/s").tag(10)
-                            Text("100/s").tag(100)
-                            Text("全部").tag(0)
-                        }
-                        .frame(width: 140)
-                        .disabled(monitor.recording)
-                    }
-
-                    HStack {
-                        Toggle("自动停止", isOn: $monitor.autoEnabled)
-                            .frame(width: 220)
-                            .disabled(monitor.recording)
-                    }
-
-                    HStack(spacing: 10) {
-                        Picker("", selection: $monitor.autoKind) {
-                            Text("|电流|").tag("current")
-                            Text("功率").tag("power")
-                        }
-                        .labelsHidden()
-                        .frame(width: 90)
-
-                        Text("低于")
-                            .foregroundStyle(.secondary)
-                        TextField("", value: $monitor.threshold, format: .number)
-                            .frame(width: 60)
-
-                        Text("连续")
-                            .foregroundStyle(.secondary)
-                        TextField("", value: $monitor.duration, format: .number)
-                            .frame(width: 60)
-
-                        Text("秒后停止")
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.callout)
-                    .disabled(monitor.recording || !monitor.autoEnabled)
-                }
-            }
-            .disabled(monitor.controlPending || monitor.disconnecting)
-        }
-        .padding(20)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var historyHeaderInfo: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: "info.circle.fill").foregroundStyle(.blue)
-                Text("选择本地记录查看曲线和统计")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            if monitor.connected {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Text("当前采集仍在运行。打开或导入可确认停止并保存；查看列表中的记录需要先断开采集")
-                        .font(.callout).foregroundStyle(.orange)
-                }.padding(10).background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
-            }
+        .onChange(of: workspace) { next in
+            if next == "history" { monitor.listRecords() }
         }
     }
 
-    private var localRecordsPopover: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Text("本地记录")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                Spacer()
-                Button { monitor.listRecords() } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
-                }
+    // MARK: - Command bar
+
+    /// Live/history toggle plus the recording, operation, settings and file
+    /// commands, all on one line. Narrow windows use shorter labels so the row
+    /// never wraps onto a second line.
+    private var commandBar: some View {
+        commandRow(compact: contentWidth < (monitor.connected ? 900 : 720))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .systemPanel()
+    }
+
+    private func commandRow(compact: Bool) -> some View {
+        HStack(spacing: 10) {
+            Picker("", selection: $workspace) {
+                Text("实时").tag("live")
+                Text("历史").tag("history")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: compact ? 128 : 146)
+
+            if workspace == "live" { liveCommands(compact: compact) } else { historyCommands(compact: compact) }
+
+            Spacer(minLength: 8)
+
+            Button(compact ? "打开" : "打开记录") { monitor.open() }
+                .fixedSize()
                 .disabled(monitor.fileBusy)
-                .buttonStyle(.borderless)
+                .help("打开官方 CSV、SQLite 或本地记录")
+
+            exportMenu
+        }
+    }
+
+    @ViewBuilder private func liveCommands(compact: Bool) -> some View {
+        if monitor.recording {
+            Button(monitor.paused ? "继续" : "暂停") { monitor.pauseResume() }
+                .fixedSize()
+            Button("停止") { monitor.stopRecording() }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .fixedSize()
+        } else {
+            Button(compact ? "记录" : "开始记录") { monitor.startRecording() }
+                .buttonStyle(.borderedProminent)
+                .disabled(!monitor.connected)
+                .fixedSize()
+                .help("开始记录")
+        }
+
+        if monitor.connected && !compact {
+            MonitorCaptureProgress(telemetry: monitor.telemetry)
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(width: 210, alignment: .leading)
+        }
+
+        Menu("操作") {
+            Button("定位文件") { monitor.reveal() }
+                .disabled(monitor.displayedPath == nil)
+            Button("清除预览") { monitor.clearPreview() }
+                .disabled(!monitor.connected || monitor.recording || monitor.disconnecting)
+        }
+        .fixedSize()
+
+        Button(compact ? "设置" : "记录设置") { showRecordingSettings.toggle() }
+            .fixedSize()
+            .help("记录设置")
+            .popover(isPresented: $showRecordingSettings, arrowEdge: .bottom) { recordingSettingsCard }
+    }
+
+    @ViewBuilder private func historyCommands(compact: Bool) -> some View {
+        Button(compact ? "记录" : "本地记录") {
+            showLocalRecordsCard.toggle()
+        }
+        .fixedSize()
+        .help("列出最近记录，可选择查看或刷新")
+    }
+
+    // MARK: - Recording settings popover
+
+    private var recordingSettingsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("记录设置")
+                .font(.headline)
+
+            HStack(spacing: 10) {
+                Text("采样上限")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 62, alignment: .leading)
+                Picker("", selection: $monitor.rate) {
+                    Text("1/s").tag(1)
+                    Text("10/s").tag(10)
+                    Text("100/s").tag(100)
+                    Text("全部").tag(0)
+                }
+                .labelsHidden()
+                .frame(width: 130)
+                .disabled(monitor.recording)
+                Spacer(minLength: 0)
             }
 
-            if monitor.records.isEmpty {
-                Text("默认目录暂无记录，其他位置的文件可通过打开或导入查看")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(monitor.records) { record in
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(URL(fileURLWithPath: record.path).lastPathComponent)
-                                        .lineLimit(1)
-                                        .font(.callout)
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "chart.bar.doc.horizontal")
-                                            .font(.caption)
-                                        Text("\(record.count) 样本")
-                                        if record.unfinished {
-                                            Image(systemName: "exclamationmark.circle.fill")
-                                            Text("未正常结束")
-                                        }
-                                    }
-                                    .foregroundStyle(record.unfinished ? .orange : .secondary)
-                                    .font(.caption)
-                                }
-                                Spacer()
-                                Button { monitor.openSaved(record) } label: {
-                                    Label("查看", systemImage: "chart.xyaxis.line")
-                                }
-                                .disabled(monitor.connected || monitor.fileBusy)
-                            }
-                            .padding(10)
-                            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-                        }
-                    }
+            Toggle("低于阈值自动停止", isOn: $monitor.autoEnabled)
+                .disabled(monitor.recording)
+
+            HStack(spacing: 8) {
+                Picker("", selection: $monitor.autoKind) {
+                    Text("|电流|").tag("current")
+                    Text("功率").tag("power")
                 }
-                .frame(maxHeight: 300)
+                .labelsHidden()
+                .frame(width: 88)
+
+                Text("低于").foregroundStyle(.secondary)
+                TextField("", value: $monitor.threshold, format: .number)
+                    .frame(width: 62)
+                Text("连续").foregroundStyle(.secondary)
+                TextField("", value: $monitor.duration, format: .number)
+                    .frame(width: 52)
+                Text("秒")
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
+            .font(.callout)
+            .disabled(monitor.recording || !monitor.autoEnabled)
+
+            Text("采样上限在开始记录后不可更改。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
         .padding(16)
-        .frame(width: 400)
+        .frame(width: 340)
     }
 
-    // MARK: - Consolidated Chart Controls (Single Line)
-    private var consolidatedChartControls: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Time and navigation controls in one line
-            HStack(spacing: 12) {
-                Toggle("跟随", isOn: $monitor.follow)
-                    .onChange(of: monitor.follow) { value in
-                        if value {
-                            monitor.selectedRange = false
-                            monitor.refreshChart(stats: false)
-                        }
+    // MARK: - Local records card
+
+    @ViewBuilder private var localRecordsCard: some View {
+        if showLocalRecordsCard {
+            LocalRecordsCard(
+                records: monitor.records,
+                busy: monitor.fileBusy,
+                connected: monitor.connected,
+                onRefresh: { monitor.listRecords() },
+                onOpen: { monitor.openSaved($0) },
+                onClose: { showLocalRecordsCard = false }
+            )
+        }
+    }
+
+    // MARK: - Banners
+
+    private func errorBanner(_ error: String) -> some View {
+        HStack(spacing: 12) {
+            Text("⚠")
+                .font(.title3)
+                .foregroundStyle(.red)
+            Text(error)
+                .font(.callout)
+                .textSelection(.enabled)
+            Spacer(minLength: 8)
+            Button("关闭") { monitor.errorMessage = nil }
+        }
+        .padding(14)
+        .background(Color.red.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var fileBusyBanner: some View {
+        HStack(spacing: 10) {
+            ProgressView().controlSize(.small)
+            Text("正在处理文件")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Button("取消") { monitor.cancelFiles() }
+        }
+    }
+
+    private func currentFile(_ path: String) -> some View {
+        HStack(spacing: 10) {
+            Text(URL(fileURLWithPath: path).lastPathComponent)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button("定位") { monitor.reveal() }
+                .font(.caption)
+                .buttonStyle(.borderless)
+        }
+    }
+
+    // MARK: - Chart controls (single line)
+
+    private var chartCommandBar: some View {
+        HStack(spacing: 12) {
+            chartControls
+                .disabled(monitor.displayedPath == nil)
+
+            MonitorQueryProgress(activity: monitor.queryActivity)
+
+            Spacer(minLength: 0)
+
+            Text(shortRange(monitor.rangeStart, monitor.rangeEnd))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                // Kept at its ideal width so the channel selector drops a tier
+                // instead of the range collapsing to an ellipsis.
+                .fixedSize()
+                .help("当前查看范围")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .systemPanel()
+    }
+
+    /// Compact "start – end" readout so the chart control line never needs a
+    /// second row to show the viewing range.
+    private func shortRange(_ start: Double, _ end: Double) -> String {
+        func format(_ value: Double) -> String {
+            guard value.isFinite, value >= 0 else { return "—" }
+            if value >= 3600 { return String(format: "%.1fh", value / 3600) }
+            if value >= 60 {
+                return String(format: "%d:%04.1f", Int(value / 60), value.truncatingRemainder(dividingBy: 60))
+            }
+            return String(format: "%.1fs", value)
+        }
+        return "\(format(start)) – \(format(end))"
+    }
+
+    private var chartControls: some View {
+        HStack(spacing: 10) {
+            Toggle("跟随", isOn: $monitor.follow)
+                .toggleStyle(.checkbox)
+                .disabled(!monitor.connected)
+                .onChange(of: monitor.follow) { value in
+                    if value {
+                        monitor.selectedRange = false
+                        monitor.refreshChart(stats: false)
                     }
-                    .disabled(!monitor.connected)
-                    .frame(width: 90)
-
-                Picker("窗口", selection: $monitor.windowSeconds) {
-                    Text("1 分钟").tag(60.0)
-                    Text("5 分钟").tag(300.0)
-                    Text("30 分钟").tag(1800.0)
                 }
-                .frame(width: 120)
+                .help("自动跟随最新数据")
 
-                Divider().frame(height: 20)
+            Picker("", selection: $monitor.windowSeconds) {
+                Text("1 分钟").tag(60.0)
+                Text("5 分钟").tag(300.0)
+                Text("30 分钟").tag(1800.0)
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(width: 104)
+            .help("时间窗口")
 
-                Button("全程") {
-                    monitor.refreshChart(stats: true, overview: true)
-                }
+            Button("全程") { monitor.refreshChart(stats: true, overview: true) }
                 .help("全程概览")
 
-                Divider().frame(height: 16).padding(.horizontal, 4)
+            Divider().frame(height: 18)
 
-                HStack(spacing: 4) {
-                    Button("−") { monitor.zoom(2) }.help("缩小")
-                    Button("+") { monitor.zoom(0.5) }.help("放大")
+            Button("−") { monitor.zoom(2) }.help("缩小")
+            Button("+") { monitor.zoom(0.5) }.help("放大")
+
+            Divider().frame(height: 18)
+
+            Button("←") { monitor.move(-1) }.help("前移")
+            Button("→") { monitor.move(1) }.help("后移")
+
+            Divider().frame(height: 18)
+
+            channelSelector
+        }
+        .buttonStyle(.borderless)
+        .font(.callout)
+    }
+
+    /// Channel selectors stay on the one control line: all seven when there is
+    /// room, then the three primary channels plus a menu, then the menu alone.
+    private var channelSelector: some View {
+        Group {
+            if contentWidth >= 940 {
+                HStack(spacing: 10) {
+                    ForEach(MonitorChannel.allCases) { channel in channelToggle(channel) }
                 }
-
-                Divider().frame(height: 16).padding(.horizontal, 4)
-
-                HStack(spacing: 4) {
-                    Button("←") { monitor.move(-1) }.help("前移")
-                    Button("→") { monitor.move(1) }.help("后移")
+            } else if contentWidth >= 780 {
+                HStack(spacing: 10) {
+                    ForEach([MonitorChannel.voltage, .current, .power]) { channel in channelToggle(channel) }
+                    allChannelsMenu
                 }
-
-                if monitor.querying {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.leading, 4)
-                }
-
-                Spacer()
-            }
-            .font(.title3)
-            .buttonStyle(.borderless)
-            .disabled(monitor.displayedPath == nil || monitor.querying)
-
-            Divider()
-
-            // Channel selection - compact grid
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 85), spacing: 16)],
-                alignment: .leading,
-                spacing: 10
-            ) {
-                ForEach(MonitorChannel.allCases) { channel in
-                    Toggle(channel.title, isOn: Binding(
-                        get: { monitor.channels.contains(channel) },
-                        set: { enabled in
-                            if enabled {
-                                monitor.channels.insert(channel)
-                            } else {
-                                monitor.channels.remove(channel)
-                            }
-                        }
-                    ))
-                    .toggleStyle(.checkbox)
-                    .font(.callout)
-                }
+            } else {
+                allChannelsMenu
             }
         }
     }
+
+    private func channelToggle(_ channel: MonitorChannel) -> some View {
+        Toggle(channel.title, isOn: channelBinding(channel))
+            .toggleStyle(.checkbox)
+            .fixedSize()
+    }
+
+    private var allChannelsMenu: some View {
+        Menu("通道") {
+            ForEach(MonitorChannel.allCases) { channel in
+                Toggle(channel.title, isOn: channelBinding(channel))
+            }
+        }
+        .fixedSize()
+        .help("选择曲线通道")
+    }
+
+    private func channelBinding(_ channel: MonitorChannel) -> Binding<Bool> {
+        Binding(
+            get: { monitor.channels.contains(channel) },
+            set: { enabled in
+                if enabled { monitor.channels.insert(channel) } else { monitor.channels.remove(channel) }
+            }
+        )
+    }
+
+    // MARK: - Charts
 
     @ViewBuilder private var charts: some View {
         if !monitor.points.isEmpty {
             if monitor.channels.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "chart.line.downtrend.xyaxis")
-                        .font(.title)
-                        .foregroundStyle(.secondary)
-                    Text("请选择至少一个曲线通道")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 200)
-            }
-            ForEach(MonitorChannel.allCases.filter { monitor.channels.contains($0) }) { channel in
-                MonitorChart(
-                    points: monitor.points,
-                    channel: channel,
-                    start: monitor.query?.rangeStart ?? monitor.rangeStart,
-                    end: monitor.query?.rangeEnd ?? monitor.rangeEnd,
-                    selection: interval,
-                    onSelect: monitor.select
-                )
-            }
-        } else {
-            VStack(spacing: 16) {
-                Image(systemName: "chart.xyaxis.line")
-                    .font(.system(size: 44))
-                    .foregroundStyle(.secondary)
-                Text(monitor.connected ? "等待遥测数据" : "连接 K2 或打开历史记录")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                if !monitor.connected {
-                    HStack(spacing: 12) {
-                        Button { showConnection() } label: {
-                            Label("设备连接", systemImage: "cable.connector")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        Button { monitor.open() } label: {
-                            Label("打开记录", systemImage: "folder")
-                        }
-                        .disabled(monitor.fileBusy)
+                emptyChartPanel(message: "请选择至少一个曲线通道", height: 180) { EmptyView() }
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(displayedChannels) { channel in
+                        MonitorChart(
+                            points: monitor.points,
+                            channel: channel,
+                            start: monitor.query?.rangeStart ?? monitor.rangeStart,
+                            end: monitor.query?.rangeEnd ?? monitor.rangeEnd,
+                            selection: interval,
+                            onSelect: monitor.select
+                        )
                     }
                 }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 240)
+        } else {
+            emptyChartPanel(message: monitor.connected ? "等待遥测数据" : "连接 K2 或打开历史记录",
+                            height: 220) {
+                if !monitor.connected {
+                    HStack(spacing: 12) {
+                        Button("设备连接") { showConnection() }
+                            .buttonStyle(.borderedProminent)
+                        Button("打开记录") { monitor.open() }
+                            .disabled(monitor.fileBusy)
+                    }
+                }
+            }
         }
     }
+
+    private func emptyChartPanel<Actions: View>(message: String, height: CGFloat,
+                                                @ViewBuilder actions: () -> Actions) -> some View {
+        VStack(spacing: 14) {
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            actions()
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .systemPanel()
+    }
+
+    // MARK: - Statistics
 
     private var statistics: some View {
         DisclosureGroup("区间统计", isExpanded: $statisticsExpanded) {
@@ -494,11 +463,9 @@ struct MonitorView: View {
                         .foregroundStyle(.secondary)
                     TextField("结束", value: $monitor.rangeEnd, format: .number)
                         .frame(width: 90)
-                    Button { monitor.select(monitor.rangeStart, monitor.rangeEnd) } label: {
-                        Label("计算", systemImage: "function")
-                    }
-                    .disabled(monitor.querying || monitor.displayedPath == nil)
-                    Spacer()
+                    Button("计算") { monitor.select(monitor.rangeStart, monitor.rangeEnd) }
+                        .disabled(monitor.displayedPath == nil)
+                    Spacer(minLength: 0)
                 }
                 Text("也可直接拖选曲线；统计使用原始样本计算")
                     .font(.callout)
@@ -514,37 +481,10 @@ struct MonitorView: View {
         .font(.callout)
     }
 
-    // MARK: - Helper Functions
+    // MARK: - Helpers
+
     private func deviceTime(_ seconds: Int?) -> String {
         seconds.map { MonitorFormat.elapsed(Double($0)) } ?? "—"
-    }
-
-    private func reading(_ title: String, _ value: Double?, _ unit: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fontWeight(.medium)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(MonitorFormat.number(value))
-                    .font(.system(size: 42, weight: .regular, design: .rounded))
-                    .monospacedDigit()
-                Text(unit)
-                    .font(.title3)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func detailReading(_ title: String, _ value: String, _ suffix: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value + (suffix.isEmpty ? "" : " " + suffix))
-                .font(.callout.monospacedDigit())
-        }
     }
 
     private var exportMenu: some View {
@@ -557,6 +497,7 @@ struct MonitorView: View {
             Button("保存曲线 PNG") { saveChart() }
                 .disabled(monitor.points.isEmpty)
         }
+        .fixedSize()
     }
 
     @ViewBuilder private func exportItems(selection: Bool) -> some View {
@@ -571,7 +512,7 @@ struct MonitorView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let renderer = ImageRenderer(content: MonitorPlotExport(
             points: monitor.points,
-            channels: MonitorChannel.allCases.filter { monitor.channels.contains($0) },
+            channels: displayedChannels,
             start: monitor.query?.rangeStart ?? 0,
             end: monitor.query?.rangeEnd ?? 1
         ))
